@@ -207,7 +207,12 @@ alias -l hl_sendkeys {
 
 ; Alias d'ouverture du salon et de positionnement à l'endroit exact du Highlight
 alias -l hl_open_chan_at_hl {
-  var %line = $strip($1-)
+  var %line = $null
+  if ($1 isnum && $window(@Highlights)) {
+    %line = $line(@Highlights, $1)
+  }
+  if (!%line) %line = $1-
+  %line = $strip(%line)
   if (!%line) return
   
   ; 1. Extraction du salon (#salon)
@@ -222,45 +227,45 @@ alias -l hl_open_chan_at_hl {
   if (!%chan) return
   
   ; 2. Extraction exacte de la phrase telle qu'affichée dans @Highlights
+  ; Recherche du salon [#salon] pour extraire la phrase brute intégrale sans altérer les espaces
+  var %pos_chan = $pos(%line, $chr(91) $+ %chan $+ $chr(93))
   var %phrase = $null
-  if ($regex(%line, /\[#[^\]\s]+\]\s(.*)$/)) {
-    %phrase = $regml(1)
-  }
-  elseif ($regex(%line, /\]\s(.*)$/)) {
-    %phrase = $regml(1)
+  if (%pos_chan) {
+    var %start = $calc(%pos_chan + $len(%chan) + 2)
+    if ($mid(%line, %start, 1) == $chr(32)) inc %start
+    %phrase = $mid(%line, %start)
   }
   else {
     %phrase = %line
   }
   
-  ; Vérification et conservation du statut du pseudo (@, +, %, ~, &, etc.)
-  ; Respect absolu des espaces après le <pseudo> (aucune altération)
-  if ($regex(%phrase, /^<([^>]+)>(.*)$/)) {
-    var %full_nick = $regml(1)
-    var %after_nick = $regml(2)
-    var %clean_nick = %full_nick
-    while ($left(%clean_nick, 1) isin ~&@%+) {
-      %clean_nick = $mid(%clean_nick, 2)
-    }
-    ; Si aucun préfixe de statut n'était présent, vérifier si la personne en a un sur le salon
-    if ($left(%full_nick, 1) !isin ~&@%+) {
-      if ($nick(%chan, %clean_nick).pnick) {
-        %full_nick = $nick(%chan, %clean_nick).pnick
-        %phrase = < $+ %full_nick $+ > $+ %after_nick
+  ; Si le pseudo n'avait pas de préfixe de statut (@, +, %, etc.),
+  ; on ajuste uniquement le préfixe sans jamais concaténer ni altérer les espaces qui suivent
+  if ($left(%phrase, 1) == <) {
+    var %gt = $pos(%phrase, >)
+    if (%gt > 2) {
+      var %full_nick = $mid(%phrase, 2, $calc(%gt - 2))
+      if ($left(%full_nick, 1) !isin ~&@%+) {
+        if ($nick(%chan, %full_nick).pnick) {
+          var %pnick = $nick(%chan, %full_nick).pnick
+          if (%pnick != %full_nick) {
+            %phrase = $left(%phrase, 1) $+ %pnick $+ $mid(%phrase, %gt)
+          }
+        }
       }
     }
   }
-  elseif ($regex(%phrase, /^\*\s+([^\s]+)(.*)$/)) {
-    var %full_nick = $regml(1)
-    var %after_nick = $regml(2)
-    var %clean_nick = %full_nick
-    while ($left(%clean_nick, 1) isin ~&@%+) {
-      %clean_nick = $mid(%clean_nick, 2)
-    }
-    if ($left(%full_nick, 1) !isin ~&@%+) {
-      if ($nick(%chan, %clean_nick).pnick) {
-        %full_nick = $nick(%chan, %clean_nick).pnick
-        %phrase = * %full_nick $+ %after_nick
+  elseif ($left(%phrase, 2) === * ) {
+    var %sp = $pos(%phrase, $chr(32), 2)
+    if (%sp > 3) {
+      var %full_nick = $mid(%phrase, 3, $calc(%sp - 3))
+      if ($left(%full_nick, 1) !isin ~&@%+) {
+        if ($nick(%chan, %full_nick).pnick) {
+          var %pnick = $nick(%chan, %full_nick).pnick
+          if (%pnick != %full_nick) {
+            %phrase = * %pnick $+ $mid(%phrase, %sp)
+          }
+        }
       }
     }
   }
@@ -275,7 +280,7 @@ alias -l hl_open_chan_at_hl {
   ; Activer la fenêtre du salon
   window -a %chan
   
-  ; 3. Copie exactement identique à la phrase de la fenêtre des Highlights
+  ; 3. Copie exactement identique à la phrase de la fenêtre des Highlights (aucun écrasement d'espaces)
   var %search = %phrase
   if (%search) {
     clipboard %search
@@ -321,28 +326,25 @@ on ^*:HOTLINK:*:@Highlights: {
 ; Déclenchement automatique lors du DOUBLE-CLIC sur une ligne
 on *:HOTLINK:*:@Highlights: {
   haltdef
-  var %line = $hotline
-  if (!%line) %line = %hl_last_clicked_line
-  if (!%line && $mouse.line) %line = $line(@Highlights, $mouse.line)
-  if (!%line && $sline(@Highlights, 1).ln) %line = $line(@Highlights, $sline(@Highlights, 1).ln)
-  hl_open_chan_at_hl %line
+  var %ln = $mouse.line
+  if (!%ln) %ln = $sline(@Highlights, 1).ln
+  if (%ln) hl_open_chan_at_hl %ln
+  else hl_open_chan_at_hl $hotline
 }
 
 ; Menu contextuel (clic-droit) sur la fenêtre @Highlights
 menu @Highlights {
   dclick: {
-    var %line = $hotline
-    if (!%line) %line = %hl_last_clicked_line
-    if (!%line && $mouse.line) %line = $line(@Highlights, $mouse.line)
-    if (!%line && $sline(@Highlights, 1).ln) %line = $line(@Highlights, $sline(@Highlights, 1).ln)
-    hl_open_chan_at_hl %line
+    var %ln = $mouse.line
+    if (!%ln) %ln = $sline(@Highlights, 1).ln
+    if (%ln) hl_open_chan_at_hl %ln
+    else hl_open_chan_at_hl $hotline
   }
   Aller au salon et localiser le HL: {
-    var %line = $hotline
-    if (!%line) %line = %hl_last_clicked_line
-    if (!%line && $mouse.line) %line = $line(@Highlights, $mouse.line)
-    if (!%line && $sline(@Highlights, 1).ln) %line = $line(@Highlights, $sline(@Highlights, 1).ln)
-    hl_open_chan_at_hl %line
+    var %ln = $mouse.line
+    if (!%ln) %ln = $sline(@Highlights, 1).ln
+    if (%ln) hl_open_chan_at_hl %ln
+    else hl_open_chan_at_hl $hotline
   }
   Ouvrir un PV avec le pseudo: {
     var %line = $hotline
