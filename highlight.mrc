@@ -248,10 +248,19 @@ alias -l hl_open_chan_at_hl {
   %msg = $strip(%msg)
   %msg = $remove(%msg, $chr(34))
   
-  ; Nettoyage des préfixes éventuels du pseudo (~, &, @, %, +)
+  ; Gestion du pseudo et de son statut (@, +, %, ~, &, etc.)
+  var %status_nick = %nick
   var %clean_nick = %nick
   while ($left(%clean_nick, 1) isin ~&@%+) {
     %clean_nick = $mid(%clean_nick, 2)
+  }
+  
+  ; Si le pseudo extrait n'avait pas de préfixe de statut (@, +, %, ~, &),
+  ; vérifier si la personne possède actuellement un statut sur le salon (%chan)
+  if ($left(%status_nick, 1) !isin ~&@%+) {
+    if ($nick(%chan, %clean_nick).pnick) {
+      %status_nick = $nick(%chan, %clean_nick).pnick
+    }
   }
   
   ; Si l'utilisateur n'est pas sur le salon, on le rejoint
@@ -264,35 +273,34 @@ alias -l hl_open_chan_at_hl {
   ; Activer la fenêtre du salon
   window -a %chan
   
-  ; 3. Préparation du motif de recherche : RECHERCHE DE LA PHRASE ENTIÈRE
-  ; On recherche la phrase contenant le HL (et non le mot seul) pour cibler la ligne exacte
-  var %search = $null
-  if ($numtok(%msg, 32) >= 3) {
-    ; Pour une phrase normale, on prend la phrase complète (jusqu'à 8 mots ou 60 caractères pour être 100% unique)
-    if ($numtok(%msg, 32) > 8) {
-      %search = $gettok(%msg, 1-8, 32)
-    }
-    elseif ($len(%msg) > 60) {
-      %search = $left(%msg, 60)
+  ; 3. Préparation du motif de recherche : RECHERCHE AVEC STATUT DU PSEUDO INCLUS
+  ; On inclut impérativement le statut et le pseudo (<@Pseudo>, <+Pseudo>, etc.) pour cibler la ligne exacte
+  var %nick_prefix = $null
+  if (%status_nick) {
+    if (%is_action == 1) {
+      %nick_prefix = * %status_nick $+ $chr(32)
     }
     else {
-      %search = %msg
+      %nick_prefix = < $+ %status_nick $+ > $+ $chr(32)
+    }
+  }
+  
+  var %search = $null
+  var %full_target = %nick_prefix $+ %msg
+  if (%full_target) {
+    ; On prend jusqu'à 7 mots ou 55 caractères pour une recherche ciblée et unique dans le tampon mIRC
+    if ($numtok(%full_target, 32) > 7) {
+      %search = $gettok(%full_target, 1-7, 32)
+    }
+    elseif ($len(%full_target) > 55) {
+      %search = $left(%full_target, 55)
+    }
+    else {
+      %search = %full_target
     }
   }
   else {
-    ; Si la phrase est très courte (1 ou 2 mots, ex: juste le pseudo prononcé),
-    ; on associe le pseudo de l'auteur pour ne pas sauter sur les lignes de son propre pseudo
-    if (%clean_nick) {
-      if (%is_action == 1) {
-        %search = * %clean_nick %msg
-      }
-      else {
-        %search = < $+ %clean_nick $+ > %msg
-      }
-    }
-    else {
-      %search = %msg
-    }
+    %search = %msg
   }
   
   ; 4. Exécution du saut vers la phrase exacte du Highlight dans le salon
