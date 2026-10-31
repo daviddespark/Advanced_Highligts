@@ -221,45 +221,47 @@ alias -l hl_open_chan_at_hl {
   
   if (!%chan) return
   
-  ; 2. Extraction du pseudo et de la phrase complète du message
-  var %nick = $null
-  var %msg = $null
-  var %is_action = 0
-  
-  ; Format action : [HH:nn:ss] [#salon] * Pseudo message...
-  if ($regex(%line, /\]\s+\*\s+([^\s]+)\s+(.*)$/)) {
-    %is_action = 1
-    %nick = $regml(1)
-    %msg = $regml(2)
+  ; 2. Extraction exacte de la phrase telle qu'affichée dans @Highlights
+  var %phrase = $null
+  if ($regex(%line, /\[#[^\]\s]+\]\s(.*)$/)) {
+    %phrase = $regml(1)
   }
-  ; Format texte : [HH:nn:ss] [#salon] <Pseudo> message...
-  elseif ($regex(%line, /<([^>]+)>\s*(.*)$/)) {
-    %nick = $regml(1)
-    %msg = $regml(2)
-  }
-  elseif ($pos(%line, >)) {
-    %msg = $mid(%line, $calc($pos(%line, >) + 1))
+  elseif ($regex(%line, /\]\s(.*)$/)) {
+    %phrase = $regml(1)
   }
   else {
-    %msg = $gettok(%line, 3-, 32)
+    %phrase = %line
   }
   
-  ; Nettoyage complet de la phrase
-  %msg = $strip(%msg)
-  %msg = $remove(%msg, $chr(34))
-  
-  ; Gestion du pseudo et de son statut (@, +, %, ~, &, etc.)
-  var %status_nick = %nick
-  var %clean_nick = %nick
-  while ($left(%clean_nick, 1) isin ~&@%+) {
-    %clean_nick = $mid(%clean_nick, 2)
+  ; Vérification et conservation du statut du pseudo (@, +, %, ~, &, etc.)
+  ; Respect absolu des espaces après le <pseudo> (aucune altération)
+  if ($regex(%phrase, /^<([^>]+)>(.*)$/)) {
+    var %full_nick = $regml(1)
+    var %after_nick = $regml(2)
+    var %clean_nick = %full_nick
+    while ($left(%clean_nick, 1) isin ~&@%+) {
+      %clean_nick = $mid(%clean_nick, 2)
+    }
+    ; Si aucun préfixe de statut n'était présent, vérifier si la personne en a un sur le salon
+    if ($left(%full_nick, 1) !isin ~&@%+) {
+      if ($nick(%chan, %clean_nick).pnick) {
+        %full_nick = $nick(%chan, %clean_nick).pnick
+        %phrase = < $+ %full_nick $+ > $+ %after_nick
+      }
+    }
   }
-  
-  ; Si le pseudo extrait n'avait pas de préfixe de statut (@, +, %, ~, &),
-  ; vérifier si la personne possède actuellement un statut sur le salon (%chan)
-  if ($left(%status_nick, 1) !isin ~&@%+) {
-    if ($nick(%chan, %clean_nick).pnick) {
-      %status_nick = $nick(%chan, %clean_nick).pnick
+  elseif ($regex(%phrase, /^\*\s+([^\s]+)(.*)$/)) {
+    var %full_nick = $regml(1)
+    var %after_nick = $regml(2)
+    var %clean_nick = %full_nick
+    while ($left(%clean_nick, 1) isin ~&@%+) {
+      %clean_nick = $mid(%clean_nick, 2)
+    }
+    if ($left(%full_nick, 1) !isin ~&@%+) {
+      if ($nick(%chan, %clean_nick).pnick) {
+        %full_nick = $nick(%chan, %clean_nick).pnick
+        %phrase = * %full_nick $+ %after_nick
+      }
     }
   }
   
@@ -273,39 +275,9 @@ alias -l hl_open_chan_at_hl {
   ; Activer la fenêtre du salon
   window -a %chan
   
-  ; 3. Préparation du motif de recherche : RECHERCHE AVEC STATUT DU PSEUDO INCLUS
-  ; On inclut impérativement le statut et le pseudo (<@Pseudo>, <+Pseudo>, etc.) pour cibler la ligne exacte
-  var %nick_prefix = $null
-  if (%status_nick) {
-    if (%is_action == 1) {
-      %nick_prefix = * %status_nick $+ $chr(32)
-    }
-    else {
-      %nick_prefix = < $+ %status_nick $+ > $+ $chr(32)
-    }
-  }
-  
-  var %search = $null
-  var %full_target = %nick_prefix $+ %msg
-  if (%full_target) {
-    ; On prend jusqu'à 7 mots ou 55 caractères pour une recherche ciblée et unique dans le tampon mIRC
-    if ($numtok(%full_target, 32) > 7) {
-      %search = $gettok(%full_target, 1-7, 32)
-    }
-    elseif ($len(%full_target) > 55) {
-      %search = $left(%full_target, 55)
-    }
-    else {
-      %search = %full_target
-    }
-  }
-  else {
-    %search = %msg
-  }
-  
-  ; 4. Exécution du saut vers la phrase exacte du Highlight dans le salon
+  ; 3. Copie exactement identique à la phrase de la fenêtre des Highlights
+  var %search = %phrase
   if (%search) {
-    ; Copier la phrase exacte dans le presse-papier pour un collage fidèle
     clipboard %search
     set -u5 %hl_jump_chan %chan
     set -u5 %hl_jump_search %search
