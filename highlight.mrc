@@ -219,7 +219,7 @@ alias -l hl_sendkeys {
   }
 }
 
-; Alias d'ouverture du salon et de positionnement à l'endroit exact du Highlight
+; Alias d'ouverture du salon et de positionnement à l'endroit exact du Highlight par Timestamp
 alias -l hl_open_chan_at_hl {
   var %line = $null
   if ($1 isnum && $window(@Highlights)) {
@@ -229,80 +229,39 @@ alias -l hl_open_chan_at_hl {
   %line = $strip(%line)
   if (!%line) return
   
-  ; 1. Extraction du salon (#salon)
+  ; 1. Extraction du timestamp [HH:nn:ss] et du salon [#salon]
+  var %time = $null
   var %chan = $null
-  if ($regex(%line, /\[(#[^\]\s]+)\]/)) {
-    %chan = $regml(1)
-  }
-  elseif ($regex(%line, /\b(#[^\s,;:]+)\b/)) {
-    %chan = $regml(1)
-  }
   
-  if (!%chan) return
-  
-  ; 2. Extraction exacte de la phrase telle qu'affichée dans @Highlights
-  ; Recherche du salon [#salon] pour extraire la phrase brute intégrale sans altérer les espaces
-  var %pos_chan = $pos(%line, $chr(91) $+ %chan $+ $chr(93))
-  var %phrase = $null
-  if (%pos_chan) {
-    var %start = $calc(%pos_chan + $len(%chan) + 2)
-    if ($mid(%line, %start, 1) == $chr(32)) inc %start
-    %phrase = $mid(%line, %start)
+  if ($regex(%line, /^(\[\d{1,2}:\d{2}(?::\d{2})?\])\s+\[(#[^\]\s]+)\]/)) {
+    %time = $regml(1)
+    %chan = $regml(2)
   }
   else {
-    %phrase = %line
+    if ($regex(%line, /(\[\d{1,2}:\d{2}(?::\d{2})?\])/)) %time = $regml(1)
+    if ($regex(%line, /\[(#[^\]\s]+)\]/)) %chan = $regml(1)
+    elseif ($regex(%line, /\b(#[^\s,;:]+)\b/)) %chan = $regml(1)
   }
   
-  ; Si le pseudo n'avait pas de préfixe de statut (@, +, %, etc.),
-  ; on ajuste uniquement le préfixe sans jamais concaténer ni altérer les espaces qui suivent
-  if ($left(%phrase, 1) == <) {
-    var %gt = $pos(%phrase, >)
-    if (%gt > 2) {
-      var %full_nick = $mid(%phrase, 2, $calc(%gt - 2))
-      if ($left(%full_nick, 1) !isin ~&@%+) {
-        if ($nick(%chan, %full_nick).pnick) {
-          var %pnick = $nick(%chan, %full_nick).pnick
-          if (%pnick != %full_nick) {
-            %phrase = $left(%phrase, 1) $+ %pnick $+ $mid(%phrase, %gt)
-          }
-        }
-      }
-    }
-  }
-  elseif ($left(%phrase, 2) === * ) {
-    var %sp = $pos(%phrase, $chr(32), 2)
-    if (%sp > 3) {
-      var %full_nick = $mid(%phrase, 3, $calc(%sp - 3))
-      if ($left(%full_nick, 1) !isin ~&@%+) {
-        if ($nick(%chan, %full_nick).pnick) {
-          var %pnick = $nick(%chan, %full_nick).pnick
-          if (%pnick != %full_nick) {
-            %phrase = * %pnick $+ $mid(%phrase, %sp)
-          }
-        }
-      }
-    }
-  }
+  if (!%chan || !%time) return
   
-  ; Si l'utilisateur n'est pas sur le salon, on le rejoint
+  ; 2. Si l'utilisateur n'est pas sur le salon, on le rejoint
   if (!$me ison %chan) {
     join %chan
     echo -a $chr(3) $+ 10*** Rejoint le salon %chan suite au Highlight.
     return
   }
   
-  ; Activer la fenêtre du salon
+  ; 3. Activer la fenêtre du salon
   window -a %chan
   
-  ; 3. Copie exactement identique à la phrase de la fenêtre des Highlights (aucun écrasement d'espaces)
-  var %search = %phrase
-  if (%search) {
-    hl_copy_clip %search
-    set -u5 %hl_jump_chan %chan
-    set -u5 %hl_jump_search %search
-    ; Étape 1 : dès que le salon a le focus (100ms), ouvrir la boîte Find Text native (Ctrl+F)
-    .timer_hl_jump1 -m 1 100 hl_exec_jump_step1
-  }
+  ; 4. Copie du timestamp dans le presse-papier et positionnement à la 1re occurrence
+  var %search = %time
+  clipboard %search
+  set -u5 %hl_jump_chan %chan
+  set -u5 %hl_jump_search %search
+  ; Étape 1 : dès que le salon a le focus (100ms), ouvrir la boîte Find Text native (Ctrl+F)
+  .timer_hl_jump1 -m 1 100 hl_exec_jump_step1
 }
 
 ; Étape 1 : ouvrir la boîte native de recherche Find Text de mIRC (Ctrl+F)
