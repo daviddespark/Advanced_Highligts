@@ -188,10 +188,24 @@ alias -l hl_log_win {
   var %nick_str = $chr(60) $+ %pnick $+ $chr(62)
   
   if (%type == action) {
-    aline -p @Highlights $chr(3) $+ 14 $+ %time_str $chr(3) $+ 10 $+ %chan_str $chr(06) * %pnick $chr(15) %colored
+    aline -p @Highlights $chr(3) $+ 14 $+ %time_str $chr(3) $+ 10 $+ %chan_str $chr(06) * %pnick $+ $chr(15) %colored
   }
   else {
-    aline -p @Highlights $chr(3) $+ 14 $+ %time_str $chr(3) $+ 10 $+ %chan_str $chr(3) $+ 03 $+ %nick_str $chr(15) %colored
+    aline -p @Highlights $chr(3) $+ 14 $+ %time_str $chr(3) $+ 10 $+ %chan_str $chr(3) $+ 03 $+ %nick_str $+ $chr(15) %colored
+  }
+}
+
+; Copie sécurisée dans le presse-papier avec préservation stricte des espaces multiples
+alias -l hl_copy_clip {
+  clipboard $1-
+  if ($pos($1-, $chr(32) $+ $chr(32))) {
+    var %wsh = hl_wsh_clip_ $+ $ticks
+    .comopen %wsh WScript.Shell
+    if (!$comerr) {
+      var %cmd = powershell -NoProfile -WindowStyle Hidden -Command "Set-Clipboard -Value ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(' $+ $encode($1-, m) $+ ')))"
+      noop $com(%wsh, Run, 1, string, %cmd, integer, 0, boolean, true)
+      .comclose %wsh
+    }
   }
 }
 
@@ -283,7 +297,7 @@ alias -l hl_open_chan_at_hl {
   ; 3. Copie exactement identique à la phrase de la fenêtre des Highlights (aucun écrasement d'espaces)
   var %search = %phrase
   if (%search) {
-    clipboard %search
+    hl_copy_clip %search
     set -u5 %hl_jump_chan %chan
     set -u5 %hl_jump_search %search
     ; Étape 1 : dès que le salon a le focus (100ms), ouvrir la boîte Find Text native (Ctrl+F)
@@ -441,10 +455,10 @@ alias -l hl_check_msg {
         ; 4. Affichage systématique dans le SALON EN QUESTION (%chan) avec le mot surligné
         if ($window(%chan)) {
           if (%type == action) {
-            echo %chan $chr(3) $+ 14 $+ %time_str $chr(06) * %pnick $chr(15) %col_txt
+            echo %chan $chr(3) $+ 14 $+ %time_str $chr(06) * %pnick $+ $chr(15) %col_txt
           }
           else {
-            echo %chan $chr(3) $+ 14 $+ %time_str $chr(3) $+ 03 $+ %nick_str $chr(15) %col_txt
+            echo %chan $chr(3) $+ 14 $+ %time_str $chr(3) $+ 03 $+ %nick_str $+ $chr(15) %col_txt
           }
         }
         
@@ -453,10 +467,10 @@ alias -l hl_check_msg {
         if ((!$window(%chan) || $active != %chan) && %target != fenetre) {
           var %chan_str = $chr(91) $+ %chan $+ $chr(93)
           if (%type == action) {
-            echo -a $chr(3) $+ 14 $+ %time_str $chr(3) $+ 10 $+ %chan_str $chr(06) * %pnick $chr(15) %col_txt
+            echo -a $chr(3) $+ 14 $+ %time_str $chr(3) $+ 10 $+ %chan_str $chr(06) * %pnick $+ $chr(15) %col_txt
           }
           else {
-            echo -a $chr(3) $+ 14 $+ %time_str $chr(3) $+ 10 $+ %chan_str $chr(3) $+ 03 $+ %nick_str $chr(15) %col_txt
+            echo -a $chr(3) $+ 14 $+ %time_str $chr(3) $+ 10 $+ %chan_str $chr(3) $+ 03 $+ %nick_str $+ $chr(15) %col_txt
           }
         }
         
