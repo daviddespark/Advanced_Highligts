@@ -2,7 +2,8 @@
 ; LOG MANAGER v1.0 POUR mIRC
 ; Auteur : Paradoxe80
 ; Description : Gestionnaire de logs avancé multi-serveurs avec interface graphique,
-;               archivage automatique classé par réseau, et visionneuse intégrée.
+;               détection automatique de tous les salons rejoints, archivage classé
+;               par réseau et visionneuse intégrée.
 ; ==============================================================================
 
 ; ------------------------------------------------------------------------------
@@ -85,12 +86,13 @@ dialog log_dialog {
   ; Bannière graphique d'en-tête (840x64)
   icon 1, 0 0 840 64, $mircexe, 0, noborder
 
-  ; Panneau Gauche : Salons & Cibles configurés (w=380, h=390)
-  box "Salons et Cibles configurés pour l'archivage", 2, 14 74 380 390
+  ; Panneau Gauche : Salons & Cibles détectés et configurés (w=380, h=390)
+  box "Salons et Cibles à archiver (Multi-Serveurs)", 2, 14 74 380 390
   list 10, 24 98 360 310, vsbar
-  button "+ Ajouter salon actuel", 51, 24 422 145 28
-  button "Activer / Pause", 52, 175 422 110 28
-  button "Supprimer", 53, 291 422 93 28
+  button "Activer / Pause", 52, 24 422 110 28
+  button "Tout activer", 51, 140 422 105 28
+  button "Actualiser", 56, 251 422 75 28
+  button "Suppr.", 53, 332 422 52 28
 
   ; Panneau Droit : Paramètres de la cible sélectionnée (w=418, h=390)
   box "Paramètres de la cible sélectionnée", 3, 408 74 418 390
@@ -148,7 +150,6 @@ on *:dialog:log_dialog:init:0: {
     var %net = $scid(%i).network
     if (%net == $null) %net = $scid(%i).server
     if (%net != $null) {
-      ; Ajouter si pas encore présent dans le combo
       var %idx = 1, %found = 0
       while (%idx <= $did($dname, 21).lines) {
         if ($did($dname, 21, %idx).text == %net) { %found = 1 | break }
@@ -171,7 +172,7 @@ on *:dialog:log_dialog:init:0: {
   ; Valeurs par défaut du formulaire de droite
   log_dialog_clear_form
 
-  ; Charger la liste des cibles configurées
+  ; Scanner et charger la liste de tous les salons rejoints + cibles configurées
   log_dialog_refresh_list
 }
 
@@ -209,99 +210,107 @@ on *:dialog:log_dialog:sclick:61: {
 
 ; Sélection d'un élément dans la liste
 on *:dialog:log_dialog:sclick:10: {
-  var %sel = $did(10).sel
-  if (%sel == $null) %sel = $log_extract_id($did(10).seltext)
-  if (%sel != $null) {
-    log_dialog_load_target %sel
-  }
+  log_dialog_load_selected_line
 }
 
-; Double-clic sur un élément dans la liste
+; Double-clic sur un salon : Bascule Activer / Pause instantanément
 on *:dialog:log_dialog:dclick:10: {
-  var %sel = $did(10).sel
-  if (%sel == $null) %sel = $log_extract_id($did(10).seltext)
-  if (%sel != $null) {
-    log_dialog_load_target %sel
-    did -f $dname 23
-  }
+  log_dialog_toggle_selected
 }
 
-; Bouton "Nouvelle cible" (vider formulaire)
+; Bouton "Activer / Pause" (Bascule l'état de la cible sélectionnée)
+on *:dialog:log_dialog:sclick:52: {
+  log_dialog_toggle_selected
+}
+
+; Bouton "Tout activer" : Active l'archivage de tous les salons actuellement rejoints
+on *:dialog:log_dialog:sclick:51: {
+  var %f = $log_ini
+  var %s = 1
+  var %count_act = 0
+  while (%s <= $scon(0)) {
+    scon %s
+    var %net = $network
+    if (%net == $null) %net = $server
+    if (%net == $null) %net = Serveur_ $+ %s
+    var %c = 1
+    while (%c <= $chan(0)) {
+      var %chan = $chan(%c)
+      var %cfg_id = $log_find_entry(%net, %chan)
+      if (%cfg_id != $null) {
+        writeini %f $log_sec(%cfg_id) active 1
+      }
+      else {
+        var %count = $readini(%f, General, count)
+        if (%count == $null) %count = 0
+        inc %count
+        writeini %f General count %count
+        var %sec = $log_sec(%count)
+        writeini %f %sec network %net
+        writeini %f %sec chan %chan
+        writeini %f %sec active 1
+        writeini %f %sec log_msg 1
+        writeini %f %sec log_act 1
+        writeini %f %sec log_joinpart 1
+        writeini %f %sec log_quit 1
+        writeini %f %sec log_kick 1
+        writeini %f %sec log_topic 1
+        writeini %f %sec rotation daily
+        writeini %f %sec timestamp [HH:nn:ss]
+      }
+      inc %count_act
+      inc %c
+    }
+    inc %s
+  }
+  scon -r
+  log_dialog_refresh_list
+  echo -a $chr(3) $+ 03*** [Log Manager] Tous vos salons actifs ( $+ %count_act $+ ) ont été configurés et activés pour l'archivage !
+}
+
+; Bouton "Actualiser" (rescanne tous les serveurs et salons rejoints)
+on *:dialog:log_dialog:sclick:56: {
+  log_dialog_refresh_list
+  echo -a $chr(3) $+ 10*** [Log Manager] Liste des salons et réseaux actualisée.
+}
+
+; Bouton "Nouvelle cible" (vider formulaire pour ajout manuel)
 on *:dialog:log_dialog:sclick:55: {
   log_dialog_clear_form
   did -f $dname 23
 }
 
-; Bouton "+ Ajouter salon actuel" (détecte salon actif et réseau)
-on *:dialog:log_dialog:sclick:51: {
-  var %chan = $active
-  var %net = $network
-  if (%net == $null) %net = $server
-  
-  if ($left(%chan, 1) != #) {
-    noop $input(Vous devez être positionné sur une fenêtre de salon pour ajouter le salon actuel. $+ $crlf $+ Salon détecté : %chan, o w, Salon invalide)
-    return
-  }
-
-  ; Sélectionner le réseau dans le combo si possible
-  var %idx = 1, %found = 0
-  while (%idx <= $did(21).lines) {
-    if ($did(21, %idx).text == %net) {
-      did -c $dname 21 %idx
-      %found = 1
-      break
-    }
-    inc %idx
-  }
-  if (%found == 0) {
-    did -a $dname 21 %net
-    did -c $dname 21 $did(21).lines
-  }
-
-  did -ra $dname 23 %chan
-  did -c $dname 24
-  did -f $dname 54
-  echo -a $chr(3) $+ 10*** Préparation de l'archivage pour %chan sur le réseau %net. Cliquez sur 'Enregistrer cible' pour confirmer.
-}
-
-; Bouton "Activer / Pause" (Bascule l'état de la cible)
-on *:dialog:log_dialog:sclick:52: {
-  var %sel = $did(10).sel
-  if (%sel == $null) %sel = $log_extract_id($did(10).seltext)
-  if (%sel == $null) {
-    noop $input(Veuillez sélectionner un salon dans la liste pour modifier son état., o w, Aucune sélection)
-    return
-  }
-  var %f = $log_ini
-  var %sec = $log_sec(%sel)
-  var %act = $readini(%f, %sec, active)
-  var %nact = $iif(%act == 1, 0, 1)
-  writeini %f %sec active %nact
-  log_dialog_refresh_list %sel
-}
-
 ; Bouton "Supprimer"
 on *:dialog:log_dialog:sclick:53: {
   var %sel = $did(10).sel
-  if (%sel == $null) %sel = $log_extract_id($did(10).seltext)
   if (%sel == $null) {
     noop $input(Veuillez sélectionner un salon dans la liste à supprimer., o w, Aucune sélection)
     return
   }
-  var %f = $log_ini
-  var %sec = $log_sec(%sel)
-  var %tgt = $readini(%f, %sec, chan)
-  
-  var %rep = $input(Voulez-vous vraiment supprimer l'archivage configuré pour ' $+ %tgt $+ ' ?, y n q, Confirmation de suppression)
+  var %text = $did(10, %sel).text
+  var %net = $null, %chan = $null
+  if ($regex(%text, /^\[([^\]]+)\]\s+([^\s]+)/)) {
+    %net = $regml(1)
+    %chan = $regml(2)
+  }
+  if (%chan == $null) return
+
+  var %cfg_id = $log_find_entry(%net, %chan)
+  if (%cfg_id == $null) {
+    noop $input(Ce salon n'est pas encore enregistré dans votre fichier de configuration., o i, Info)
+    return
+  }
+
+  var %rep = $input(Voulez-vous vraiment supprimer la configuration d'archivage pour ' $+ %chan $+ ' ( $+ %net $+ ) ?, y n q, Confirmation)
   if (%rep != yes) return
 
-  log_delete_target %sel
+  log_delete_target %cfg_id
   log_dialog_refresh_list
   log_dialog_clear_form
-  echo -a $chr(3) $+ 04*** Salon %tgt supprimé des cibles d'archivage.
+  echo -a $chr(3) $+ 04*** Salon %chan ( $+ %net $+ ) supprimé de la configuration d'archivage.
 }
 
-; Bouton "Enregistrer cible" (Ajout ou Modification)
+; Bouton "Enregistrer cible" (Ajout ou Modification manuelle)
 on *:dialog:log_dialog:sclick:54: {
   var %d = $dname
   var %chan = $strip($did(23).text)
@@ -330,46 +339,15 @@ on *:dialog:log_dialog:sclick:54: {
   var %count = $readini(%f, General, count)
   if (%count == $null) %count = 0
 
-  ; Vérifier si on modifie une entrée sélectionnée existante
-  var %sel = $did(10).sel
-  if (%sel == $null) %sel = $log_extract_id($did(10).seltext)
-
-  ; Si le salon sélectionné correspond au formulaire, on met à jour
-  var %target_id = $null
-  if (%sel != $null) && (%sel <= %count) {
-    var %cur_chan = $readini(%f, $log_sec(%sel), chan)
-    var %cur_net = $readini(%f, $log_sec(%sel), network)
-    if ($lower(%cur_chan) == $lower(%chan)) && ($lower(%cur_net) == $lower(%net)) {
-      %target_id = %sel
-    }
-  }
-
-  ; Sinon, vérification anti-doublon parmi tous les éléments
-  if (%target_id == $null) {
-    var %i = 1
-    while (%i <= %count) {
-      var %ex_c = $readini(%f, $log_sec(%i), chan)
-      var %ex_n = $readini(%f, $log_sec(%i), network)
-      if ($lower(%ex_c) == $lower(%chan)) && ($lower(%ex_n) == $lower(%net)) {
-        var %upd = $input(Cette cible existe déjà (# $+ %i $+ ). Souhaitez-vous mettre à jour ses paramètres ?, y n q, Cible existante)
-        if (%upd == yes) {
-          %target_id = %i
-          break
-        }
-        else return
-      }
-      inc %i
-    }
-  }
-
-  ; Nouveau ou mise à jour
-  if (%target_id == $null) {
+  ; Vérifier si l'entrée existe déjà
+  var %cfg_id = $log_find_entry(%net, %chan)
+  if (%cfg_id == $null) {
     inc %count
-    %target_id = %count
+    %cfg_id = %count
     writeini %f General count %count
   }
 
-  var %sec = $log_sec(%target_id)
+  var %sec = $log_sec(%cfg_id)
   writeini %f %sec network %net
   writeini %f %sec chan %chan
   writeini %f %sec active %active
@@ -382,20 +360,13 @@ on *:dialog:log_dialog:sclick:54: {
   writeini %f %sec rotation %rotation
   writeini %f %sec timestamp %timestamp
 
-  log_dialog_refresh_list %target_id
-  noop $input(La cible d'archivage pour ' $+ %chan $+ ' ( $+ %net $+ ) a été enregistrée avec succès !, o i, Enregistrement réussi)
-  echo -a $chr(3) $+ 03*** Configuration d'archivage enregistrée pour %chan sur %net (# $+ %target_id $+ ).
+  log_dialog_refresh_list
+  echo -a $chr(3) $+ 03*** [Log Manager] Configuration enregistrée pour %chan sur %net.
 }
 
 ; ------------------------------------------------------------------------------
-; ALIAS UTILITAIRES POUR LE DIALOGUE
+; ALIAS DE GESTION DE LA LISTE ET DES DONNÉES
 ; ------------------------------------------------------------------------------
-
-alias -l log_extract_id {
-  var %tok = $gettok($1, 1, 32)
-  if (#* iswm %tok) return $remove(%tok, #)
-  return $null
-}
 
 alias -l log_dialog_clear_form {
   if (!$dialog(log_dialog)) return
@@ -414,43 +385,208 @@ alias -l log_dialog_clear_form {
   did -c %d 37 1
 }
 
-alias -l log_dialog_refresh_list {
-  if (!$dialog(log_dialog)) return
-  var %d = log_dialog
-  var %sel_id = $1
+; Recherche dans logs.ini si un salon + réseau est configuré
+alias -l log_find_entry {
+  var %net = $1
+  var %chan = $2
   var %f = $log_ini
-  var %total = $readini(%f, General, count)
-  if (%total == $null) %total = 0
-
-  did -r %d 10
-
+  var %count = $readini(%f, General, count)
+  if (%count == $null) return $null
   var %i = 1
-  while (%i <= %total) {
+  while (%i <= %count) {
     var %sec = $log_sec(%i)
-    var %chan = $readini(%f, %sec, chan)
-    if (%chan != $null) {
-      var %net = $readini(%f, %sec, network)
-      if (%net == $null) %net = Tous
-      var %act = $readini(%f, %sec, active)
-      var %act_txt = $iif(%act == 1, ON, OFF)
-      var %rot = $readini(%f, %sec, rotation)
-      var %rot_txt = Jour
-      if (%rot == monthly) %rot_txt = Mois
-      elseif (%rot == continuous) %rot_txt = Continu
-
-      var %line_txt = $chr(35) $+ %i $chr(91) $+ %act_txt $+ $chr(93) $chr(91) $+ %net $+ $chr(93) %chan ( $+ %rot_txt $+ )
-      did -a %d 10 %line_txt
-
-      if (%sel_id == %i) {
-        did -c %d 10 %i
+    var %c_chan = $readini(%f, %sec, chan)
+    var %c_net = $readini(%f, %sec, network)
+    if ($lower(%c_chan) == $lower(%chan)) {
+      if (%c_net == $null) || (%c_net == Tous les réseaux (*)) || (%c_net == *) || ($lower(%c_net) == $lower(%net)) {
+        return %i
       }
     }
     inc %i
   }
+  return $null
+}
 
-  if (%sel_id != $null) && (%sel_id <= %total) {
-    log_dialog_load_target %sel_id
+; Actualise la liste 10 en scannant tous les serveurs et salons actuellement rejoints
+alias -l log_dialog_refresh_list {
+  if (!$dialog(log_dialog)) return
+  var %d = log_dialog
+  var %sel_idx = $1
+  var %f = $log_ini
+
+  did -r %d 10
+
+  ; 1. Scanner tous les salons rejoints sur tous les serveurs ouverts
+  var %total_displayed = 0
+  var %s = 1
+  while (%s <= $scon(0)) {
+    scon %s
+    var %net = $network
+    if (%net == $null) %net = $server
+    if (%net == $null) %net = Serveur_ $+ %s
+    
+    var %c = 1
+    while (%c <= $chan(0)) {
+      var %chan = $chan(%c)
+      
+      ; Vérifier l'état dans logs.ini
+      var %cfg_id = $log_find_entry(%net, %chan)
+      var %status = [NON ARCHIVE]
+      
+      if (%cfg_id != $null) {
+        var %sec = $log_sec(%cfg_id)
+        var %act = $readini(%f, %sec, active)
+        var %rot = $readini(%f, %sec, rotation)
+        if (%act == 1) {
+          var %rot_txt = $iif(%rot == monthly, Mois, $iif(%rot == continuous, Continu, Jour))
+          %status = [ACTIF - %rot_txt $+ ]
+        }
+        else {
+          %status = [PAUSE]
+        }
+      }
+      
+      inc %total_displayed
+      var %item_text = $chr(91) $+ %net $+ $chr(93) %chan  --  %status
+      did -a %d 10 %item_text
+      
+      inc %c
+    }
+    inc %s
   }
+  scon -r
+
+  ; 2. Ajouter également les cibles de logs.ini qui ne sont pas des salons actifs (ex: *, masques, salons hors-ligne)
+  var %count = $readini(%f, General, count)
+  if (%count == $null) %count = 0
+  var %k = 1
+  while (%k <= %count) {
+    var %sec = $log_sec(%k)
+    var %c_chan = $readini(%f, %sec, chan)
+    var %c_net = $readini(%f, %sec, network)
+    if (%c_chan != $null) {
+      ; Vérifier si déjà présent dans la liste
+      var %already = 0
+      var %chk = 1
+      while (%chk <= %total_displayed) {
+        var %t_line = $did(%d, 10, %chk).text
+        if ($chr(91) $+ %c_net $+ $chr(93) isin %t_line) && (%c_chan isin %t_line) {
+          %already = 1
+          break
+        }
+        inc %chk
+      }
+      if (%already == 0) {
+        var %act = $readini(%f, %sec, active)
+        var %rot = $readini(%f, %sec, rotation)
+        var %rot_txt = $iif(%rot == monthly, Mois, $iif(%rot == continuous, Continu, Jour))
+        var %st = $iif(%act == 1, [ACTIF - %rot_txt $+ ], [PAUSE])
+        did -a %d 10 $chr(91) $+ %c_net $+ $chr(93) %c_chan  --  %st
+        inc %total_displayed
+      }
+    }
+    inc %k
+  }
+
+  if (%total_displayed == 0) {
+    did -a %d 10 (Aucun salon rejoint sur vos serveurs - Rejoignez un salon ou ajoutez-en un à droite)
+  }
+
+  if (%sel_idx != $null) && (%sel_idx <= %total_displayed) {
+    did -c %d 10 %sel_idx
+    log_dialog_load_selected_line
+  }
+}
+
+; Charge les paramètres du salon sélectionné dans le panneau droit
+alias -l log_dialog_load_selected_line {
+  if (!$dialog(log_dialog)) return
+  var %d = log_dialog
+  var %sel = $did(10).sel
+  if (%sel == $null) return
+  var %text = $did(10, %sel).text
+  if (%text == $null) || ($left(%text, 1) != [) return
+
+  var %net = $null, %chan = $null
+  if ($regex(%text, /^\[([^\]]+)\]\s+([^\s]+)/)) {
+    %net = $regml(1)
+    %chan = $regml(2)
+  }
+  if (%chan == $null) return
+
+  ; Si l'entrée est déjà configurée dans logs.ini, on charge ses paramètres
+  var %cfg_id = $log_find_entry(%net, %chan)
+  if (%cfg_id != $null) {
+    log_dialog_load_target %cfg_id
+  }
+  else {
+    ; Salon non encore configuré : on pré-remplit les valeurs par défaut
+    var %idx = 1
+    while (%idx <= $did(21).lines) {
+      if ($did(21, %idx).text == %net) {
+        did -c %d 21 %idx
+        break
+      }
+      inc %idx
+    }
+    did -ra %d 23 %chan
+    did -c %d 24
+    did -c %d 26
+    did -c %d 27
+    did -c %d 28
+    did -c %d 29
+    did -c %d 30
+    did -c %d 31
+    did -c %d 33
+    did -u %d 34
+    did -u %d 35
+    did -c %d 37 1
+  }
+}
+
+; Bascule l'état Actif / Inactif de la cible sélectionnée
+alias -l log_dialog_toggle_selected {
+  var %d = log_dialog
+  var %sel = $did(10).sel
+  if (%sel == $null) return
+  var %text = $did(10, %sel).text
+  if (%text == $null) || ($left(%text, 1) != [) return
+
+  var %net = $null, %chan = $null
+  if ($regex(%text, /^\[([^\]]+)\]\s+([^\s]+)/)) {
+    %net = $regml(1)
+    %chan = $regml(2)
+  }
+  if (%chan == $null) return
+
+  var %f = $log_ini
+  var %cfg_id = $log_find_entry(%net, %chan)
+  if (%cfg_id != $null) {
+    var %sec = $log_sec(%cfg_id)
+    var %act = $readini(%f, %sec, active)
+    var %nact = $iif(%act == 1, 0, 1)
+    writeini %f %sec active %nact
+  }
+  else {
+    ; Enregistrer comme nouvelle cible active
+    var %count = $readini(%f, General, count)
+    if (%count == $null) %count = 0
+    inc %count
+    writeini %f General count %count
+    var %sec = $log_sec(%count)
+    writeini %f %sec network %net
+    writeini %f %sec chan %chan
+    writeini %f %sec active 1
+    writeini %f %sec log_msg 1
+    writeini %f %sec log_act 1
+    writeini %f %sec log_joinpart 1
+    writeini %f %sec log_quit 1
+    writeini %f %sec log_kick 1
+    writeini %f %sec log_topic 1
+    writeini %f %sec rotation daily
+    writeini %f %sec timestamp [HH:nn:ss]
+  }
+  log_dialog_refresh_list %sel
 }
 
 alias -l log_dialog_load_target {
@@ -476,18 +612,13 @@ alias -l log_dialog_load_target {
   var %timestamp = $readini(%f, %sec, timestamp)
 
   ; Sélection réseau dans combo
-  var %idx = 1, %found = 0
+  var %idx = 1
   while (%idx <= $did(21).lines) {
     if ($did(21, %idx).text == %net) {
       did -c %d 21 %idx
-      %found = 1
       break
     }
     inc %idx
-  }
-  if (%found == 0) {
-    did -a %d 21 %net
-    did -c %d 21 $did(21).lines
   }
 
   did -ra %d 23 %chan
@@ -712,7 +843,6 @@ on *:PART:#: {
 on *:QUIT: {
   var %net = $network
   if (%net == $null) %net = $server
-  ; Enregistrer le quit sur chaque salon partagé
   var %i = 1
   while (%i <= $comchan($nick, 0)) {
     var %c = $comchan($nick, %i)
