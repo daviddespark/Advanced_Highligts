@@ -548,14 +548,14 @@ alias -l log_cb_add_net {
 }
 
 alias -l log_viewer_populate_channels {
-  if (!$dialog(log_viewer_dialog)) return
   var %d = log_viewer_dialog
+  if (!$dialog(%d)) return
   did -r %d 21
   did -r %d 31
 
-  var %net_sel = $did(%d, 11).sel
-  if (%net_sel == $null) return
-  var %net = $did(%d, 11, %net_sel).text
+  var %net = $did(%d, 11).seltext
+  if (%net == $null) && ($did(%d, 11).sel) %net = $did(%d, 11, $did(%d, 11).sel)
+  if (%net == $null) || ($left(%net, 1) == () return
   var %net_dir = $log_root $+ %net $+ \
   if (!$isdir(%net_dir)) return
 
@@ -608,12 +608,12 @@ alias -l log_viewer_populate_files {
   if (!$dialog(%d)) return
   did -r %d 31
 
-  var %net_sel = $did(%d, 11).sel
-  var %chan_sel = $did(%d, 21).sel
-  if (%net_sel == $null) || (%chan_sel == $null) return
+  var %net = $did(%d, 11).seltext
+  if (%net == $null) && ($did(%d, 11).sel) %net = $did(%d, 11, $did(%d, 11).sel)
+  var %chan = $did(%d, 21).seltext
+  if (%chan == $null) && ($did(%d, 21).sel) %chan = $did(%d, 21, $did(%d, 21).sel)
 
-  var %net = $did(%d, 11, %net_sel).text
-  var %chan = $did(%d, 21, %chan_sel).text
+  if (%net == $null) || (%chan == $null) || ($left(%chan, 1) == () return
   var %net_dir = $log_root $+ %net $+ \
   var %chan_dir = %net_dir $+ %chan $+ \
 
@@ -664,15 +664,18 @@ alias -l log_cb_add_file {
 alias -l log_viewer_get_selected_filepath {
   var %d = log_viewer_dialog
   if (!$dialog(%d)) return $null
-  var %net_sel = $did(%d, 11).sel
-  var %chan_sel = $did(%d, 21).sel
-  var %file_sel = $did(%d, 31).sel
-  if (%net_sel == $null) || (%chan_sel == $null) || (%file_sel == $null) return $null
 
-  var %net = $did(%d, 11, %net_sel).text
-  var %chan = $did(%d, 21, %chan_sel).text
-  var %file = $did(%d, 31, %file_sel).text
-  if (%file == $null) || ($left(%file, 1) == () return $null
+  var %net = $did(%d, 11).seltext
+  if (%net == $null) && ($did(%d, 11).sel) %net = $did(%d, 11, $did(%d, 11).sel)
+
+  var %chan = $did(%d, 21).seltext
+  if (%chan == $null) && ($did(%d, 21).sel) %chan = $did(%d, 21, $did(%d, 21).sel)
+
+  var %file = $did(%d, 31).seltext
+  if (%file == $null) && ($did(%d, 31).sel) %file = $did(%d, 31, $did(%d, 31).sel)
+
+  if (%net == $null) || (%chan == $null) || (%file == $null) return $null
+  if ($left(%file, 1) == () return $null
 
   ; 1. Tester chemin dans le sous-dossier
   var %p1 = $log_root $+ %net $+ \ $+ %chan $+ \ $+ %file
@@ -709,7 +712,7 @@ alias -l log_viewer_display_selected {
     log_display_file %f
   }
   else {
-    echo -a $chr(3) $+ 04*** [Log Viewer] Veuillez d'abord sélectionner un fichier log dans la colonne 3.
+    noop $input(Veuillez sélectionner un fichier log dans la colonne 3., ow, Fichier requis)
   }
 }
 
@@ -767,6 +770,7 @@ alias log_display_file {
     window -e @Logs
   }
   window -a @Logs
+  window -w2 @Logs
 
   var %sz = $file(%f).size
   var %sz_str = %sz octets
