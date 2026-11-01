@@ -2,8 +2,8 @@
 ; LOG MANAGER v1.0 POUR mIRC
 ; Auteur : Paradoxe80
 ; Description : Gestionnaire de logs avancé multi-serveurs avec interface graphique,
-;               détection automatique de tous les salons rejoints, archivage classé
-;               par réseau et visionneuse intégrée.
+;               détection automatique des salons rejoints, archivage classé par
+;               réseau et visionneuse complète intégrée (@Logs & Dialog).
 ; ==============================================================================
 
 ; ------------------------------------------------------------------------------
@@ -36,7 +36,7 @@ alias -l log_set_cfg {
 }
 
 ; ------------------------------------------------------------------------------
-; GÉNÉRATION DE LA BANNIÈRE GRAPHIQUE (DESIGN MODERNE EN PIXELS)
+; GÉNÉRATION DES BANNIÈRES GRAPHIQUES (DESIGN MODERNE EN PIXELS)
 ; ------------------------------------------------------------------------------
 alias -l log_assets {
   var %dir = $log_dir
@@ -44,14 +44,10 @@ alias -l log_assets {
   var %w = @log_draw
   if ($window(%w)) window -c %w
   
-  ; Création d'une fenêtre hors écran pour dessiner la bannière (840x64 pixels)
   window -hpfB %w 0 0 840 64
-  
-  ; Dégradé sombre bleuté moderne
   drawrect -rfn %w $rgb(16,20,32) 1 0 0 840 64
   drawrect -rfn %w $rgb(26,34,54) 1 0 0 840 32
   
-  ; Liseré multicolore moderne en bas de la bannière (dégradé Cyan -> Indigo -> Violet)
   var %k = 0
   while (%k < 14) {
     var %col = $rgb($calc(20 + %k * 14), $calc(130 + %k * 6), $calc(240 - %k * 8))
@@ -59,7 +55,6 @@ alias -l log_assets {
     inc %k
   }
   
-  ; Badge d'état global dynamique à droite
   var %sys_st = $log_get_cfg(enabled, 1)
   var %st_bg = $iif(%sys_st == 1, $rgb(36,160,82), $rgb(210,45,45))
   var %st_txt = $iif(%sys_st == 1, SYSTEME ACTIF, SYSTEME EN PAUSE)
@@ -67,35 +62,63 @@ alias -l log_assets {
   drawrect -rn %w $rgb(255,255,255) 1 670 18 145 28
   drawtext -nro %w $rgb(255,255,255) Verdana 11 685 24 %st_txt
   
-  ; Titre et sous-titre
   drawtext -nro %w $rgb(255,255,255) Verdana 17 20 8 Log Manager par Paradoxe80
-  drawtext -nr %w $rgb(165,185,225) Verdana 10 22 36 Archivage automatique multi-serveurs, classe par reseau & visionneuse
+  drawtext -nr %w $rgb(165,185,225) Verdana 10 22 36 Configuration de l'archivage automatique multi-serveurs
   
   drawsave %w $qt(%dir $+ banner_logs.bmp)
   window -c %w
 }
 
+alias -l log_viewer_assets {
+  var %dir = $log_dir
+  if (!$isdir(%dir)) mkdir $qt(%dir)
+  var %w = @log_vdraw
+  if ($window(%w)) window -c %w
+  
+  window -hpfB %w 0 0 840 64
+  drawrect -rfn %w $rgb(16,24,36) 1 0 0 840 64
+  drawrect -rfn %w $rgb(24,38,60) 1 0 0 840 32
+  
+  var %k = 0
+  while (%k < 14) {
+    var %col = $rgb($calc(20 + %k * 10), $calc(150 + %k * 6), $calc(220 - %k * 10))
+    drawrect -rfn %w %col 1 $calc(%k * 60) 60 60 4
+    inc %k
+  }
+  
+  drawrect -rfn %w $rgb(30,130,200) 1 670 18 145 28
+  drawrect -rn %w $rgb(255,255,255) 1 670 18 145 28
+  drawtext -nro %w $rgb(255,255,255) Verdana 11 680 24 VISIONNEUSE
+  
+  drawtext -nro %w $rgb(255,255,255) Verdana 17 20 8 Visionneuse de Logs par Paradoxe80
+  drawtext -nr %w $rgb(165,195,235) Verdana 10 22 36 Exploration des historiques, lecture complete & recherche de texte
+  
+  drawsave %w $qt(%dir $+ banner_viewer.bmp)
+  window -c %w
+}
+
 ; ------------------------------------------------------------------------------
-; INTERFACE GRAPHIQUE (DIALOG / GUI) - DESIGN HAUTE QUALITÉ EN PIXELS
+; INTERFACE PRINCIPALE (LOG MANAGER)
 ; ------------------------------------------------------------------------------
 dialog log_dialog {
   title "Log Manager v1.0 - Gestionnaire d'Archivage Multi-Serveurs"
-  size -1 -1 840 516
+  size -1 -1 840 520
   option pixels
 
   ; Bannière graphique d'en-tête (840x64)
   icon 1, 0 0 840 64, $mircexe, 0, noborder
 
   ; Panneau Gauche : Salons & Cibles détectés et configurés (w=380, h=390)
-  box "Salons et Cibles à archiver (Multi-Serveurs)", 2, 14 74 380 390
-  list 10, 24 98 360 310, vsbar
-  button "Activer / Pause", 52, 24 422 110 28
-  button "Tout activer", 51, 140 422 105 28
-  button "Actualiser", 56, 251 422 75 28
-  button "Suppr.", 53, 332 422 52 28
+  box "Salons et Cibles à archiver (Multi-Serveurs)", 2, 14 74 380 395
+  list 10, 24 98 360 280, vsbar
+  button "Consulter ce log", 57, 24 384 175 28
+  button "Activer / Pause", 52, 209 384 175 28
+  button "Tout activer", 51, 24 422 110 28
+  button "Actualiser", 56, 144 422 115 28
+  button "Supprimer", 53, 269 422 115 28
 
   ; Panneau Droit : Paramètres de la cible sélectionnée (w=418, h=390)
-  box "Paramètres de la cible sélectionnée", 3, 408 74 418 390
+  box "Paramètres de la cible sélectionnée", 3, 408 74 418 395
   text "Réseau / Serveur IRC :", 20, 424 96 170 16
   combo 21, 424 114 180 140, drop
   text "Salon ou Masque (ex: #salon ou *) :", 22, 614 96 200 16
@@ -123,26 +146,20 @@ dialog log_dialog {
   button "Nouvelle cible", 55, 614 422 196 28
 
   ; Barre inférieure globale
-  check "Activer l'archivage global des logs", 8, 14 476 225 24
-  check "Archiver aussi les Privés (PV)", 9, 245 476 195 24
-  button "Ouvrir dossier logs", 60, 448 474 125 28
-  button "Visionneuse @Logs", 61, 580 474 135 28
-  button "Fermer", 70, 723 474 103 28, ok
+  check "Activer l'archivage global des logs", 8, 14 480 225 24
+  check "Archiver aussi les Privés (PV)", 9, 245 480 195 24
+  button "Ouvrir dossier logs", 60, 448 478 125 28
+  button "Visionneuse complète...", 61, 580 478 145 28
+  button "Fermer", 70, 733 478 93 28, ok
 }
 
-; ------------------------------------------------------------------------------
-; INITIALISATION DU DIALOGUE
-; ------------------------------------------------------------------------------
 on *:dialog:log_dialog:init:0: {
-  ; Générer et appliquer la bannière graphique
   log_assets
   did -g $dname 1 $shortfn($log_dir $+ banner_logs.bmp)
 
-  ; Charger les réglages généraux
   if ($log_get_cfg(enabled, 1) == 1) did -c $dname 8
   if ($log_get_cfg(log_pv, 1) == 1) did -c $dname 9
 
-  ; Peupler la liste des réseaux dans le combo 21
   did -r $dname 21
   did -a $dname 21 Tous les réseaux (*)
   var %i = 1
@@ -161,7 +178,6 @@ on *:dialog:log_dialog:init:0: {
   }
   did -c $dname 21 1
 
-  ; Peupler les formats d'horodatage dans le combo 37
   did -r $dname 37
   did -a $dname 37 [HH:nn:ss]
   did -a $dname 37 [HH:nn]
@@ -169,10 +185,7 @@ on *:dialog:log_dialog:init:0: {
   did -a $dname 37 HH:nn:ss
   did -c $dname 37 1
 
-  ; Valeurs par défaut du formulaire de droite
   log_dialog_clear_form
-
-  ; Scanner et charger la liste de tous les salons rejoints + cibles configurées
   log_dialog_refresh_list
 }
 
@@ -180,50 +193,59 @@ on *:dialog:log_dialog:close:0: {
   if ($window(@log_draw)) window -c @log_draw
 }
 
-; ------------------------------------------------------------------------------
-; GESTIONNAIRES D'ÉVÉNEMENTS DU DIALOGUE
-; ------------------------------------------------------------------------------
-
-; Clic sur "Activer l'archivage global des logs"
 on *:dialog:log_dialog:sclick:8: {
   log_set_cfg enabled $did(8).state
   log_assets
   did -g $dname 1 $shortfn($log_dir $+ banner_logs.bmp)
 }
 
-; Clic sur "Archiver aussi les Privés (PV)"
 on *:dialog:log_dialog:sclick:9: {
   log_set_cfg log_pv $did(9).state
 }
 
-; Bouton "Ouvrir dossier logs" (Explorateur Windows)
 on *:dialog:log_dialog:sclick:60: {
   var %p = $log_root
   if (!$isdir(%p)) mkdir $qt(%p)
   run explorer.exe $qt(%p)
 }
 
-; Bouton "Visionneuse @Logs"
 on *:dialog:log_dialog:sclick:61: {
   log_viewer_open
 }
 
-; Sélection d'un élément dans la liste
 on *:dialog:log_dialog:sclick:10: {
   log_dialog_load_selected_line
 }
 
-; Double-clic sur un salon : Bascule Activer / Pause instantanément
 on *:dialog:log_dialog:dclick:10: {
   log_dialog_toggle_selected
 }
 
-; Bouton "Activer / Pause" (Bascule l'état de la cible sélectionnée)
 on *:dialog:log_dialog:sclick:52: {
   log_dialog_toggle_selected
 }
 
-; Bouton "Tout activer" : Active l'archivage de tous les salons actuellement rejoints
+; Bouton "Consulter ce log" (affiche directement le log du salon sélectionné dans @Logs)
+on *:dialog:log_dialog:sclick:57: {
+  var %sel = $did(10).sel
+  if (%sel == $null) return
+  var %text = $did(10, %sel).text
+  var %net = $null, %chan = $null
+  if ($regex(%text, /^\[([^\]]+)\]\s+([^\s]+)/)) {
+    %net = $regml(1)
+    %chan = $regml(2)
+  }
+  if (%chan == $null) return
+
+  var %file = $log_find_latest_file(%net, %chan)
+  if (%file != $null) && ($isfile(%file)) {
+    log_display_file %file
+  }
+  else {
+    noop $input(Aucun fichier log n'a encore été trouvé pour ' $+ %chan $+ ' sur ' $+ %net $+ '.$crlf $+ Les logs seront créés dès que des messages arriveront sur ce salon., o i, Aucun log trouvé)
+  }
+}
+
 on *:dialog:log_dialog:sclick:51: {
   var %f = $log_ini
   var %s = 1
@@ -268,19 +290,16 @@ on *:dialog:log_dialog:sclick:51: {
   echo -a $chr(3) $+ 03*** [Log Manager] Tous vos salons actifs ( $+ %count_act $+ ) ont été configurés et activés pour l'archivage !
 }
 
-; Bouton "Actualiser" (rescanne tous les serveurs et salons rejoints)
 on *:dialog:log_dialog:sclick:56: {
   log_dialog_refresh_list
   echo -a $chr(3) $+ 10*** [Log Manager] Liste des salons et réseaux actualisée.
 }
 
-; Bouton "Nouvelle cible" (vider formulaire pour ajout manuel)
 on *:dialog:log_dialog:sclick:55: {
   log_dialog_clear_form
   did -f $dname 23
 }
 
-; Bouton "Supprimer"
 on *:dialog:log_dialog:sclick:53: {
   var %sel = $did(10).sel
   if (%sel == $null) {
@@ -310,7 +329,6 @@ on *:dialog:log_dialog:sclick:53: {
   echo -a $chr(3) $+ 04*** Salon %chan ( $+ %net $+ ) supprimé de la configuration d'archivage.
 }
 
-; Bouton "Enregistrer cible" (Ajout ou Modification manuelle)
 on *:dialog:log_dialog:sclick:54: {
   var %d = $dname
   var %chan = $strip($did(23).text)
@@ -339,7 +357,6 @@ on *:dialog:log_dialog:sclick:54: {
   var %count = $readini(%f, General, count)
   if (%count == $null) %count = 0
 
-  ; Vérifier si l'entrée existe déjà
   var %cfg_id = $log_find_entry(%net, %chan)
   if (%cfg_id == $null) {
     inc %count
@@ -365,9 +382,424 @@ on *:dialog:log_dialog:sclick:54: {
 }
 
 ; ------------------------------------------------------------------------------
-; ALIAS DE GESTION DE LA LISTE ET DES DONNÉES
+; NOUVELLE VISIONNEUSE DE LOGS GRAPHIQUE (LOG VIEWER DIALOG)
+; ------------------------------------------------------------------------------
+dialog log_viewer_dialog {
+  title "Log Viewer v1.0 - Exploration et Consultation des Archives"
+  size -1 -1 840 520
+  option pixels
+
+  ; Bannière graphique d'en-tête (840x64)
+  icon 1, 0 0 840 64, $mircexe, 0, noborder
+
+  ; Colonne 1 : Réseaux / Dossiers
+  box "1. Réseau / Serveur", 10, 14 74 210 392
+  list 11, 24 98 190 356, vsbar
+
+  ; Colonne 2 : Salons & Cibles
+  box "2. Salons & Cibles", 20, 234 74 230 392
+  list 21, 244 98 210 356, vsbar
+
+  ; Colonne 3 : Fichiers et Dates disponibles
+  box "3. Fichiers & Dates de logs", 30, 474 74 352 392
+  list 31, 484 98 332 265, vsbar
+  
+  button "Afficher dans @Logs (Plein écran)", 41, 484 374 220 30
+  button "Bloc-notes", 42, 712 374 104 30
+  button "Ouvrir dossier", 44, 484 414 110 28
+  button "Rechercher (Ctrl+F)", 45, 602 414 125 28
+  button "Suppr.", 43, 735 414 81 28
+
+  ; Barre inférieure globale
+  text "Sélectionnez un réseau, un salon et une date à consulter.", 50, 14 480 670 20
+  button "Fermer", 70, 710 476 116 28, ok
+}
+
+on *:dialog:log_viewer_dialog:init:0: {
+  log_viewer_assets
+  did -g $dname 1 $shortfn($log_dir $+ banner_viewer.bmp)
+  log_viewer_populate_networks
+}
+
+on *:dialog:log_viewer_dialog:close:0: {
+  if ($window(@log_vdraw)) window -c @log_vdraw
+}
+
+; Clic sur un réseau dans la colonne 1
+on *:dialog:log_viewer_dialog:sclick:11: {
+  log_viewer_populate_channels
+}
+
+; Clic sur un salon dans la colonne 2
+on *:dialog:log_viewer_dialog:sclick:21: {
+  log_viewer_populate_files
+}
+
+; Clic sur un fichier dans la colonne 3
+on *:dialog:log_viewer_dialog:sclick:31: {
+  log_viewer_update_file_info
+}
+
+; Double-clic sur un fichier dans la colonne 3 : affichage direct dans @Logs
+on *:dialog:log_viewer_dialog:dclick:31: {
+  log_viewer_display_selected
+}
+
+; Bouton "Afficher dans @Logs"
+on *:dialog:log_viewer_dialog:sclick:41: {
+  log_viewer_display_selected
+}
+
+; Bouton "Bloc-notes"
+on *:dialog:log_viewer_dialog:sclick:42: {
+  var %f = $log_viewer_get_selected_filepath
+  if (%f != $null) && ($isfile(%f)) {
+    run notepad.exe $qt(%f)
+  }
+}
+
+; Bouton "Ouvrir dossier"
+on *:dialog:log_viewer_dialog:sclick:44: {
+  var %f = $log_viewer_get_selected_filepath
+  if (%f != $null) && ($isfile(%f)) {
+    run explorer.exe /select, $qt(%f)
+  }
+  else {
+    run explorer.exe $qt($log_root)
+  }
+}
+
+; Bouton "Rechercher (Ctrl+F)"
+on *:dialog:log_viewer_dialog:sclick:45: {
+  var %f = $log_viewer_get_selected_filepath
+  if (%f != $null) && ($isfile(%f)) {
+    log_display_file %f
+    var %txt = $input(Texte à rechercher dans ce log :, e, Recherche de texte)
+    if (%txt != $null) findtext %txt
+  }
+}
+
+; Bouton "Supprimer ce log"
+on *:dialog:log_viewer_dialog:sclick:43: {
+  var %f = $log_viewer_get_selected_filepath
+  if (%f == $null) || (!$isfile(%f)) return
+  var %rep = $input(Voulez-vous vraiment supprimer définitivement ce fichier log ? $+ $crlf $+ $nopath(%f), y n q, Confirmation)
+  if (%rep == yes) {
+    .remove $qt(%f)
+    log_viewer_populate_files
+  }
+}
+
+; ------------------------------------------------------------------------------
+; ALIASES INTERNES DE LA VISIONNEUSE
 ; ------------------------------------------------------------------------------
 
+alias log_viewer_open {
+  if ($dialog(log_viewer_dialog)) dialog -v log_viewer_dialog
+  else dialog -m log_viewer_dialog log_viewer_dialog
+}
+
+alias -l log_viewer_populate_networks {
+  if (!$dialog(log_viewer_dialog)) return
+  var %d = log_viewer_dialog
+  did -r %d 11
+  did -r %d 21
+  did -r %d 31
+
+  ; Trouver tous les sous-dossiers réseaux dans $log_root
+  var %root = $log_root
+  if (!$isdir(%root)) mkdir $qt(%root)
+
+  var %num = $finddir(%root, *, 0, 1)
+  var %i = 1
+  while (%i <= %num) {
+    var %dir_path = $finddir(%root, *, %i, 1)
+    var %net_name = $nopath(%dir_path)
+    if (%net_name != $null) {
+      did -a %d 11 %net_name
+    }
+    inc %i
+  }
+
+  if ($did(%d, 11).lines > 0) {
+    ; Tenter de sélectionner le réseau actif ou le premier
+    var %cur_net = $network
+    var %sel = 1
+    var %k = 1
+    while (%k <= $did(%d, 11).lines) {
+      if ($did(%d, 11, %k).text == %cur_net) { %sel = %k | break }
+      inc %k
+    }
+    did -c %d 11 %sel
+    log_viewer_populate_channels
+  }
+  else {
+    did -a %d 11 (Aucun dossier réseau)
+  }
+}
+
+alias -l log_viewer_populate_channels {
+  if (!$dialog(log_viewer_dialog)) return
+  var %d = log_viewer_dialog
+  did -r %d 21
+  did -r %d 31
+
+  var %net_sel = $did(11).sel
+  if (%net_sel == $null) return
+  var %net = $did(11, %net_sel).text
+  var %net_dir = $log_root $+ %net $+ \
+  if (!$isdir(%net_dir)) return
+
+  ; 1. Trouver les sous-dossiers de salons
+  var %sub_count = $finddir(%net_dir, *, 0, 1)
+  var %i = 1
+  while (%i <= %sub_count) {
+    var %ch_dir = $nopath($finddir(%net_dir, *, %i, 1))
+    if (%ch_dir != $null) {
+      did -a %d 21 %ch_dir
+    }
+    inc %i
+  }
+
+  ; 2. Trouver aussi les fichiers logs directs (#salon.date.log) pour extraire les salons
+  var %file_count = $findfile(%net_dir, *.log, 0, 1)
+  var %f_idx = 1
+  while (%f_idx <= %file_count) {
+    var %f_name = $nopath($findfile(%net_dir, *.log, %f_idx, 1))
+    var %ch_name = $null
+    if ($regex(%f_name, /^([#&][^._]+)/)) {
+      %ch_name = $regml(1)
+    }
+    elseif ($regex(%f_name, /^([^._]+)/)) {
+      %ch_name = $regml(1)
+    }
+    if (%ch_name != $null) {
+      ; Vérifier si déjà dans la liste 21
+      var %c_check = 1, %c_found = 0
+      while (%c_check <= $did(%d, 21).lines) {
+        if ($did(%d, 21, %c_check).text == %ch_name) { %c_found = 1 | break }
+        inc %c_check
+      }
+      if (%c_found == 0) did -a %d 21 %ch_name
+    }
+    inc %f_idx
+  }
+
+  if ($did(%d, 21).lines > 0) {
+    did -c %d 21 1
+    log_viewer_populate_files
+  }
+  else {
+    did -a %d 21 (Aucun salon trouvé)
+  }
+}
+
+alias -l log_viewer_populate_files {
+  if (!$dialog(log_viewer_dialog)) return
+  var %d = log_viewer_dialog
+  did -r %d 31
+
+  var %net_sel = $did(11).sel
+  var %chan_sel = $did(21).sel
+  if (%net_sel == $null) || (%chan_sel == $null) return
+
+  var %net = $did(11, %net_sel).text
+  var %chan = $did(21, %chan_sel).text
+  var %net_dir = $log_root $+ %net $+ \
+  var %chan_dir = %net_dir $+ %chan $+ \
+
+  ; 1. Chercher dans le sous-dossier dédié (s'il existe)
+  if ($isdir(%chan_dir)) {
+    var %n_f = $findfile(%chan_dir, *.log, 0, 1)
+    var %i = 1
+    while (%i <= %n_f) {
+      did -a %d 31 $nopath($findfile(%chan_dir, *.log, %i, 1))
+      inc %i
+    }
+  }
+
+  ; 2. Chercher aussi dans le dossier réseau direct (%chan*.log)
+  var %n_dir_f = $findfile(%net_dir, %chan $+ *.log, 0, 1)
+  var %k = 1
+  while (%k <= %n_dir_f) {
+    var %fn = $nopath($findfile(%net_dir, %chan $+ *.log, %k, 1))
+    var %chk = 1, %found = 0
+    while (%chk <= $did(%d, 31).lines) {
+      if ($did(%d, 31, %chk).text == %fn) { %found = 1 | break }
+      inc %chk
+    }
+    if (%found == 0) did -a %d 31 %fn
+    inc %k
+  }
+
+  if ($did(%d, 31).lines > 0) {
+    ; Sélectionner le dernier fichier (souvent le plus récent)
+    did -c %d 31 $did(%d, 31).lines
+    log_viewer_update_file_info
+  }
+  else {
+    did -a %d 31 (Aucun fichier log)
+    did -ra %d 50 Aucun log trouvé pour ce salon.
+  }
+}
+
+alias -l log_viewer_get_selected_filepath {
+  if (!$dialog(log_viewer_dialog)) return $null
+  var %d = log_viewer_dialog
+  var %net_sel = $did(11).sel
+  var %chan_sel = $did(21).sel
+  var %file_sel = $did(31).sel
+  if (%net_sel == $null) || (%chan_sel == $null) || (%file_sel == $null) return $null
+
+  var %net = $did(11, %net_sel).text
+  var %chan = $did(21, %chan_sel).text
+  var %file = $did(31, %file_sel).text
+  if (%file == $null) || ($left(%file, 1) == () return $null
+
+  ; Tester chemin sous-dossier
+  var %p1 = $log_root $+ %net $+ \ $+ %chan $+ \ $+ %file
+  if ($isfile(%p1)) return %p1
+
+  ; Tester chemin direct
+  var %p2 = $log_root $+ %net $+ \ $+ %file
+  if ($isfile(%p2)) return %p2
+
+  return $null
+}
+
+alias -l log_viewer_update_file_info {
+  if (!$dialog(log_viewer_dialog)) return
+  var %d = log_viewer_dialog
+  var %f = $log_viewer_get_selected_filepath
+  if (%f != $null) && ($isfile(%f)) {
+    var %sz = $file(%f).size
+    var %sz_str = %sz octets
+    if (%sz > 1048576) %sz_str = $round($calc(%sz / 1048576), 2) Mo
+    elseif (%sz > 1024) %sz_str = $round($calc(%sz / 1024), 2) Ko
+    var %mtime = $asctime($file(%f).mtime, dd/mm/yyyy à HH:nn:ss)
+    did -ra %d 50 Fichier : $nopath(%f) | Taille : %sz_str | Modifié le : %mtime
+  }
+  else {
+    did -ra %d 50 Aucun fichier sélectionné
+  }
+}
+
+alias -l log_viewer_display_selected {
+  var %f = $log_viewer_get_selected_filepath
+  if (%f != $null) && ($isfile(%f)) {
+    log_display_file %f
+  }
+  else {
+    noop $input(Veuillez sélectionner un fichier log valide dans la liste., o w, Fichier requis)
+  }
+}
+
+; Recherche le fichier log le plus récent pour un réseau et un salon donnés
+alias -l log_find_latest_file {
+  var %net = $1
+  var %chan = $2
+  var %net_dir = $log_root $+ %net $+ \
+  var %chan_dir = %net_dir $+ %chan $+ \
+
+  var %best_file = $null
+  var %best_time = 0
+
+  ; Chercher dans le sous-dossier
+  if ($isdir(%chan_dir)) {
+    var %n = $findfile(%chan_dir, *.log, 0, 1)
+    var %i = 1
+    while (%i <= %n) {
+      var %fp = $findfile(%chan_dir, *.log, %i, 1)
+      if ($file(%fp).mtime > %best_time) {
+        %best_time = $file(%fp).mtime
+        %best_file = %fp
+      }
+      inc %i
+    }
+  }
+
+  ; Chercher aussi en direct dans le dossier réseau
+  if ($isdir(%net_dir)) {
+    var %n2 = $findfile(%net_dir, %chan $+ *.log, 0, 1)
+    var %k = 1
+    while (%k <= %n2) {
+      var %fp2 = $findfile(%net_dir, %chan $+ *.log, %k, 1)
+      if ($file(%fp2).mtime > %best_time) {
+        %best_time = $file(%fp2).mtime
+        %best_file = %fp2
+      }
+      inc %k
+    }
+  }
+
+  return %best_file
+}
+
+; Affiche un fichier log dans la fenêtre @Logs avec loadbuf ultra-rapide
+alias log_display_file {
+  var %f = $1-
+  if (%f == $null) || (!$isfile(%f)) {
+    echo -a $chr(3) $+ 04*** [Log Viewer] Fichier introuvable : %f
+    return
+  }
+
+  set %log_current_file %f
+
+  if (!$window(@Logs)) {
+    window -e @Logs
+  }
+  else {
+    window -a @Logs
+  }
+
+  var %sz = $file(%f).size
+  var %sz_str = %sz octets
+  if (%sz > 1048576) %sz_str = $round($calc(%sz / 1048576), 2) Mo
+  elseif (%sz > 1024) %sz_str = $round($calc(%sz / 1024), 2) Ko
+
+  titlebar @Logs - [ $+ $nopath($nofile(%f)) $+ ] $nopath(%f) ( $+ %sz_str $+ )
+  clear @Logs
+  aline @Logs $chr(3) $+ 03*** Affichage du log : $nopath(%f) ***
+  aline @Logs $chr(3) $+ 14Réseau / Dossier : $nofile(%f)
+  aline @Logs $chr(3) $+ 14════════════════════════════════════════════════════════════════════════════════
+  
+  ; Chargement ultra-rapide de l'intégralité du fichier
+  loadbuf @Logs $qt(%f)
+  
+  aline @Logs $chr(3) $+ 14════════════════════════════════════════════════════════════════════════════════
+  aline @Logs $chr(3) $+ 03*** Fin du log (Total lignes affichées : $line(@Logs, 0)) ***
+}
+
+; ------------------------------------------------------------------------------
+; MENU CONTEXTUEL CLIC-DROIT SUR LA FENÊTRE @Logs
+; ------------------------------------------------------------------------------
+menu @Logs {
+  Parcourir d'autres logs (Visionneuse)...:log_viewer_open
+  -
+  Recharger ce log: {
+    if ($isfile(%log_current_file)) log_display_file %log_current_file
+  }
+  Ouvrir dans le Bloc-notes (Notepad): {
+    if ($isfile(%log_current_file)) run notepad.exe $qt(%log_current_file)
+  }
+  Ouvrir le dossier dans l'Explorateur: {
+    if ($isfile(%log_current_file)) run explorer.exe /select, $qt(%log_current_file)
+    else run explorer.exe $qt($log_root)
+  }
+  -
+  Rechercher du texte (Ctrl+F): {
+    var %txt = $input(Texte à rechercher dans les logs affichés :, e, Recherche de texte)
+    if (%txt != $null) findtext %txt
+  }
+  -
+  Vider cette fenêtre:clear @Logs
+  Configurer Log Manager...:log_open
+  Fermer:window -c @Logs
+}
+
+; ------------------------------------------------------------------------------
+; ALIAS UTILITAIRES POUR LOG MANAGER
+; ------------------------------------------------------------------------------
 alias -l log_dialog_clear_form {
   if (!$dialog(log_dialog)) return
   var %d = log_dialog
@@ -385,7 +817,6 @@ alias -l log_dialog_clear_form {
   did -c %d 37 1
 }
 
-; Recherche dans logs.ini si un salon + réseau est configuré
 alias -l log_find_entry {
   var %net = $1
   var %chan = $2
@@ -407,7 +838,6 @@ alias -l log_find_entry {
   return $null
 }
 
-; Actualise la liste 10 en scannant tous les serveurs et salons actuellement rejoints
 alias -l log_dialog_refresh_list {
   if (!$dialog(log_dialog)) return
   var %d = log_dialog
@@ -416,7 +846,6 @@ alias -l log_dialog_refresh_list {
 
   did -r %d 10
 
-  ; 1. Scanner tous les salons rejoints sur tous les serveurs ouverts
   var %total_displayed = 0
   var %s = 1
   while (%s <= $scon(0)) {
@@ -428,8 +857,6 @@ alias -l log_dialog_refresh_list {
     var %c = 1
     while (%c <= $chan(0)) {
       var %chan = $chan(%c)
-      
-      ; Vérifier l'état dans logs.ini
       var %cfg_id = $log_find_entry(%net, %chan)
       var %status = [NON ARCHIVE]
       
@@ -456,7 +883,6 @@ alias -l log_dialog_refresh_list {
   }
   scon -r
 
-  ; 2. Ajouter également les cibles de logs.ini qui ne sont pas des salons actifs (ex: *, masques, salons hors-ligne)
   var %count = $readini(%f, General, count)
   if (%count == $null) %count = 0
   var %k = 1
@@ -465,7 +891,6 @@ alias -l log_dialog_refresh_list {
     var %c_chan = $readini(%f, %sec, chan)
     var %c_net = $readini(%f, %sec, network)
     if (%c_chan != $null) {
-      ; Vérifier si déjà présent dans la liste
       var %already = 0
       var %chk = 1
       while (%chk <= %total_displayed) {
@@ -498,7 +923,6 @@ alias -l log_dialog_refresh_list {
   }
 }
 
-; Charge les paramètres du salon sélectionné dans le panneau droit
 alias -l log_dialog_load_selected_line {
   if (!$dialog(log_dialog)) return
   var %d = log_dialog
@@ -514,13 +938,11 @@ alias -l log_dialog_load_selected_line {
   }
   if (%chan == $null) return
 
-  ; Si l'entrée est déjà configurée dans logs.ini, on charge ses paramètres
   var %cfg_id = $log_find_entry(%net, %chan)
   if (%cfg_id != $null) {
     log_dialog_load_target %cfg_id
   }
   else {
-    ; Salon non encore configuré : on pré-remplit les valeurs par défaut
     var %idx = 1
     while (%idx <= $did(21).lines) {
       if ($did(21, %idx).text == %net) {
@@ -544,7 +966,6 @@ alias -l log_dialog_load_selected_line {
   }
 }
 
-; Bascule l'état Actif / Inactif de la cible sélectionnée
 alias -l log_dialog_toggle_selected {
   var %d = log_dialog
   var %sel = $did(10).sel
@@ -568,7 +989,6 @@ alias -l log_dialog_toggle_selected {
     writeini %f %sec active %nact
   }
   else {
-    ; Enregistrer comme nouvelle cible active
     var %count = $readini(%f, General, count)
     if (%count == $null) %count = 0
     inc %count
@@ -611,7 +1031,6 @@ alias -l log_dialog_load_target {
   var %rotation = $readini(%f, %sec, rotation)
   var %timestamp = $readini(%f, %sec, timestamp)
 
-  ; Sélection réseau dans combo
   var %idx = 1
   while (%idx <= $did(21).lines) {
     if ($did(21, %idx).text == %net) {
@@ -643,7 +1062,6 @@ alias -l log_dialog_load_target {
   if (%log_topic == 1) did -c %d 31
   else did -u %d 31
 
-  ; Rotation
   did -u %d 33
   did -u %d 34
   did -u %d 35
@@ -651,7 +1069,6 @@ alias -l log_dialog_load_target {
   elseif (%rotation == continuous) did -c %d 35
   else did -c %d 33
 
-  ; Timestamp
   var %t_idx = 1
   while (%t_idx <= $did(37).lines) {
     if ($did(37, %t_idx).text == %timestamp) {
@@ -711,9 +1128,7 @@ alias -l log_sanitize_dir {
   return %s
 }
 
-; Écriture sécurisée d'un événement dans le fichier log approprié
 alias -l log_write_entry {
-  ; Paramètres : 1=Réseau, 2=Cible/Salon, 3=TypeEvent, 4=Texte
   var %net = $1
   var %target = $2
   var %ev_type = $3
@@ -725,7 +1140,6 @@ alias -l log_write_entry {
   var %total = $readini(%f, General, count)
   if (%total == $null) %total = 0
 
-  ; Recherche d'une règle applicable
   var %i = 1, %matched = 0, %rule_id = 0
   while (%i <= %total) {
     var %sec = $log_sec(%i)
@@ -744,7 +1158,6 @@ alias -l log_write_entry {
       }
 
       if (%net_match == 1) && (%chan_match == 1) {
-        ; Vérifier si ce type d'événement est coché
         var %allowed = 1
         if (%ev_type == msg) && ($readini(%f, %sec, log_msg) == 0) %allowed = 0
         if (%ev_type == act) && ($readini(%f, %sec, log_act) == 0) %allowed = 0
@@ -763,7 +1176,6 @@ alias -l log_write_entry {
     inc %i
   }
 
-  ; Si aucun salon n'est explicitement configuré mais qu'il s'agit d'un PV et log_pv est actif
   if (%matched == 0) && ($left(%target, 1) != #) {
     if ($log_get_cfg(log_pv, 1) == 1) {
       %matched = 1
@@ -772,7 +1184,6 @@ alias -l log_write_entry {
 
   if (%matched == 0) return
 
-  ; Récupérer rotation et timestamp configurés (ou valeurs par défaut)
   var %rot = daily, %t_fmt = [HH:nn:ss]
   if (%rule_id > 0) {
     var %sec = $log_sec(%rule_id)
@@ -780,13 +1191,11 @@ alias -l log_write_entry {
     if ($readini(%f, %sec, timestamp) != $null) %t_fmt = $readini(%f, %sec, timestamp)
   }
 
-  ; Construire le chemin : logs\<Network>\<Target>\
   var %clean_net = $log_sanitize_dir(%net)
   var %clean_target = $log_sanitize_dir(%target)
   var %folder = $log_root $+ %clean_net $+ \ $+ %clean_target $+ \
   if (!$isdir(%folder)) mkdir $qt(%folder)
 
-  ; Déterminer le nom du fichier selon la rotation
   var %fname = $null
   if (%rot == monthly) {
     %fname = %clean_target $+ _ $+ $asctime(yyyy-mm) $+ .log
@@ -902,35 +1311,6 @@ on *:INPUT:?: {
 }
 
 ; ------------------------------------------------------------------------------
-; VISIONNEUSE DE LOGS INTÉGRÉE (@Logs)
-; ------------------------------------------------------------------------------
-alias log_viewer_open {
-  if (!$window(@Logs)) {
-    window -e @Logs
-    titlebar @Logs - Visionneuse des Logs
-    aline @Logs $chr(3) $+ 03*** Visionneuse de Logs ouverte ***
-    aline @Logs $chr(3) $+ 14Faites un clic droit dans cette fenêtre pour sélectionner un salon et une date à consulter.
-    aline @Logs $chr(3) $+ 14════════════════════════════════════════════════════════════════════════════════
-  }
-  else {
-    window -a @Logs
-  }
-}
-
-menu @Logs {
-  Ouvrir le dossier des logs:run explorer.exe $qt($log_root)
-  -
-  Rechercher du texte (Ctrl+F):{
-    var %txt = $input(Texte à rechercher dans les logs affichés :, e, Recherche de texte)
-    if (%txt != $null) findtext %txt
-  }
-  -
-  Vider l'affichage de cette fenêtre:clear @Logs
-  Configurer Log Manager...:log_open
-  Fermer:window -c @Logs
-}
-
-; ------------------------------------------------------------------------------
 ; COMMANDES PUBLIQUES ET MENUS mIRC
 ; ------------------------------------------------------------------------------
 alias log {
@@ -946,10 +1326,21 @@ alias log_open {
   else dialog -m log_dialog log_dialog
 }
 
+alias logview {
+  log_viewer_open
+}
+
+alias log_viewer {
+  log_viewer_open
+}
+
 menu menubar {
   -
   Log Manager: {
     log_open
+  }
+  Visionneuse de Logs: {
+    log_viewer_open
   }
 }
 
@@ -958,6 +1349,17 @@ menu channel {
   Log Manager: {
     log_open
   }
+  Lire le log de ce salon: {
+    var %net = $network
+    if (%net == $null) %net = $server
+    var %f = $log_find_latest_file(%net, $chan)
+    if (%f != $null) && ($isfile(%f)) {
+      log_display_file %f
+    }
+    else {
+      echo -a $chr(3) $+ 04*** Aucun log trouvé pour $chan sur %net.
+    }
+  }
 }
 
 menu status {
@@ -965,13 +1367,17 @@ menu status {
   Log Manager: {
     log_open
   }
+  Visionneuse de Logs: {
+    log_viewer_open
+  }
 }
 
 ; Initialisation au chargement du script
 on *:LOAD: {
   echo -a $chr(3) $+ 03════════════════════════════════════════════════════════════
   echo -a $chr(3) $+ 09 Log Manager v1.0 par Paradoxe80 chargé avec succès !
-  echo -a $chr(3) $+ 14 Tapez $chr(3) $+ 04/log $chr(3) $+ 14pour ouvrir la fenêtre de configuration.
+  echo -a $chr(3) $+ 14 Tapez $chr(3) $+ 04/log $chr(3) $+ 14pour la configuration ou $chr(3) $+ 04/logview $chr(3) $+ 14pour la visionneuse.
   echo -a $chr(3) $+ 03════════════════════════════════════════════════════════════
   log_assets
+  log_viewer_assets
 }
