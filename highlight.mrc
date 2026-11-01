@@ -222,29 +222,19 @@ alias -l hl_sendkeys {
   }
 }
 
-; Recherche du Connection ID ($cid) associé à un salon et/ou réseau à travers tous les serveurs ouverts
+; Recherche du Connection ID ($cid) associé à un salon à travers les fenêtres ouvertes
 alias -l hl_find_chan_cid {
   var %target = $1
   var %net = $2
-  var %i = 1
-  while (%i <= $scon(0)) {
-    var %c = $scon(%i)
-    if (%net && $scid(%c).network == %net && $scid(%c).window(%target)) return %c
-    inc %i
+  if ($window(%target).cid) return $window(%target).cid
+  if (%net) {
+    var %i = 1
+    while (%i <= $scid(0)) {
+      if ($scid(%i).network == %net) return $scid(%i)
+      inc %i
+    }
   }
-  var %i = 1
-  while (%i <= $scon(0)) {
-    var %c = $scon(%i)
-    if ($scid(%c).window(%target)) return %c
-    inc %i
-  }
-  var %i = 1
-  while (%i <= $scon(0)) {
-    var %c = $scon(%i)
-    if (%net && $scid(%c).network == %net) return %c
-    inc %i
-  }
-  return $null
+  return $cid
 }
 
 ; Alias d'ouverture du salon et de positionnement à l'endroit exact du Highlight par Timestamp (Multi-serveur)
@@ -305,6 +295,7 @@ alias -l hl_open_chan_at_hl {
   set -u10 %hl_jump_cid %cid
   set -u10 %hl_jump_chan %chan
   set -u10 %hl_jump_search %search
+  echo -a $chr(3) $+ 10*** [Highlights] Localisation de %chan sur $network (Heure : %search) ...
   ; Étape 1 : dès que le salon a le focus (150ms), ouvrir la boîte Find Text native (Ctrl+F)
   .timer_hl_jump1 -m 1 150 hl_exec_jump_step1
 }
@@ -313,7 +304,7 @@ alias -l hl_open_chan_at_hl {
 alias -l hl_exec_jump_step1 {
   var %cid = %hl_jump_cid
   var %chan = %hl_jump_chan
-  if ($scid(%cid).window(%chan)) {
+  if ($window(%chan)) {
     scid %cid
     window -a %chan
     hl_sendkeys ^f
@@ -326,7 +317,7 @@ alias -l hl_exec_jump_step1 {
 alias -l hl_exec_jump_step2 {
   var %cid = %hl_jump_cid
   var %chan = %hl_jump_chan
-  if ($scid(%cid).window(%chan)) {
+  if ($window(%chan)) {
     scid %cid
     ; ^a = tout sélectionner, ^v = coller le timestamp, %u = Alt+U (direction Up), {ENTER} = Valider la recherche
     hl_sendkeys ^a^v%u{ENTER}
