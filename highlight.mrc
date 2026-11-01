@@ -180,18 +180,21 @@ alias -l hl_log_win {
   }
   
   var %time = $asctime(HH:nn:ss)
+  var %net = $network
+  if (!%net) %net = $server
   var %pnick = %nick
   if ($nick(%chan, %nick).pnick) %pnick = $nick(%chan, %nick).pnick
   
   var %time_str = $chr(91) $+ %time $+ $chr(93)
+  var %net_str = $chr(91) $+ %net $+ $chr(93)
   var %chan_str = $chr(91) $+ %chan $+ $chr(93)
   var %nick_str = $chr(60) $+ %pnick $+ $chr(62)
   
   if (%type == action) {
-    aline -p @Highlights $chr(3) $+ 14 $+ %time_str $chr(3) $+ 10 $+ %chan_str $chr(06) * %pnick $+ $chr(15) %colored
+    aline -p @Highlights $chr(3) $+ 14 $+ %time_str $chr(3) $+ 06 $+ %net_str $chr(3) $+ 10 $+ %chan_str $chr(06) * %pnick $+ $chr(15) %colored
   }
   else {
-    aline -p @Highlights $chr(3) $+ 14 $+ %time_str $chr(3) $+ 10 $+ %chan_str $chr(3) $+ 03 $+ %nick_str $+ $chr(15) %colored
+    aline -p @Highlights $chr(3) $+ 14 $+ %time_str $chr(3) $+ 06 $+ %net_str $chr(3) $+ 10 $+ %chan_str $chr(3) $+ 03 $+ %nick_str $+ $chr(15) %colored
   }
 }
 
@@ -219,7 +222,32 @@ alias -l hl_sendkeys {
   }
 }
 
-; Alias d'ouverture du salon et de positionnement à l'endroit exact du Highlight par Timestamp
+; Recherche du Connection ID ($cid) associé à un salon et/ou réseau à travers tous les serveurs ouverts
+alias -l hl_find_chan_cid {
+  var %target = $1
+  var %net = $2
+  var %i = 1
+  while (%i <= $scon(0)) {
+    var %c = $scon(%i)
+    if (%net && $scid(%c).network == %net && $scid(%c).window(%target)) return %c
+    inc %i
+  }
+  var %i = 1
+  while (%i <= $scon(0)) {
+    var %c = $scon(%i)
+    if ($scid(%c).window(%target)) return %c
+    inc %i
+  }
+  var %i = 1
+  while (%i <= $scon(0)) {
+    var %c = $scon(%i)
+    if (%net && $scid(%c).network == %net) return %c
+    inc %i
+  }
+  return $null
+}
+
+; Alias d'ouverture du salon et de positionnement à l'endroit exact du Highlight par Timestamp (Multi-serveur)
 alias -l hl_open_chan_at_hl {
   var %line = $null
   if ($1 isnum && $window(@Highlights)) {
@@ -229,11 +257,19 @@ alias -l hl_open_chan_at_hl {
   %line = $strip(%line)
   if (!%line) return
   
-  ; 1. Extraction du timestamp [HH:nn:ss] et du salon [#salon]
+  ; 1. Extraction du timestamp [HH:nn:ss], du réseau éventuel et du salon [#salon]
   var %time = $null
   var %chan = $null
+  var %net = $null
   
-  if ($regex(%line, /^(\[\d{1,2}:\d{2}(?::\d{2})?\])\s+\[(#[^\]\s]+)\]/)) {
+  ; Format avec réseau éventuel [HH:nn:ss] [Network] [#salon]
+  if ($regex(%line, /^(\[\d{1,2}:\d{2}(?::\d{2})?\])\s+\[([^\]\s#]+)\]\s+\[(#[^\]\s]+)\]/)) {
+    %time = $regml(1)
+    %net = $regml(2)
+    %chan = $regml(3)
+  }
+  ; Format standard [HH:nn:ss] [#salon]
+  elseif ($regex(%line, /^(\[\d{1,2}:\d{2}(?::\d{2})?\])\s+\[(#[^\]\s]+)\]/)) {
     %time = $regml(1)
     %chan = $regml(2)
   }
@@ -241,47 +277,67 @@ alias -l hl_open_chan_at_hl {
     if ($regex(%line, /(\[\d{1,2}:\d{2}(?::\d{2})?\])/)) %time = $regml(1)
     if ($regex(%line, /\[(#[^\]\s]+)\]/)) %chan = $regml(1)
     elseif ($regex(%line, /\b(#[^\s,;:]+)\b/)) %chan = $regml(1)
+    if ($regex(%line, /\[([^\]\s#]+)\]\s+\[#/)) %net = $regml(1)
   }
   
   if (!%chan || !%time) return
   
-  ; 2. Si l'utilisateur n'est pas sur le salon, on le rejoint
+  ; 2. Trouver le bon serveur (Connection ID / $cid) pour ce salon
+  var %cid = $hl_find_chan_cid(%chan, %net)
+  if (!%cid) %cid = $cid
+  
+  ; Basculer le contexte sur le bon serveur
+  scid %cid
+  
+  ; Si l'utilisateur n'est pas sur le salon, on le rejoint sur ce serveur
   if (!$me ison %chan) {
     join %chan
-    echo -a $chr(3) $+ 10*** Rejoint le salon %chan suite au Highlight.
+    echo -a $chr(3) $+ 10*** Rejoint le salon %chan sur $network suite au Highlight.
     return
   }
   
-  ; 3. Activer la fenêtre du salon
+  ; 3. Activer la fenêtre du salon sur ce serveur
   window -a %chan
   
   ; 4. Copie du timestamp dans le presse-papier et positionnement à la 1re occurrence
   var %search = %time
   clipboard %search
-  set -u5 %hl_jump_chan %chan
-  set -u5 %hl_jump_search %search
-  ; Étape 1 : dès que le salon a le focus (100ms), ouvrir la boîte Find Text native (Ctrl+F)
-  .timer_hl_jump1 -m 1 100 hl_exec_jump_step1
+  set -u10 %hl_jump_cid %cid
+  set -u10 %hl_jump_chan %chan
+  set -u10 %hl_jump_search %search
+  ; Étape 1 : dès que le salon a le focus (150ms), ouvrir la boîte Find Text native (Ctrl+F)
+  .timer_hl_jump1 -m 1 150 hl_exec_jump_step1
 }
 
 ; Étape 1 : ouvrir la boîte native de recherche Find Text de mIRC (Ctrl+F)
 alias -l hl_exec_jump_step1 {
+  var %cid = %hl_jump_cid
   var %chan = %hl_jump_chan
-  if ($window(%chan)) {
+  if ($scid(%cid).window(%chan)) {
+    scid %cid
     window -a %chan
     hl_sendkeys ^f
-    ; Étape 2 : coller le texte, valider et fermer la boîte
-    .timer_hl_jump2 -m 1 100 hl_exec_jump_step2
+    ; Étape 2 : coller le texte, forcer recherche vers le haut et valider
+    .timer_hl_jump2 -m 1 200 hl_exec_jump_step2
   }
 }
 
-; Étape 2 : coller le texte recherché, valider la recherche (Entrée) pour sauter sur la ligne, puis fermer (Échap)
+; Étape 2 : coller le texte recherché, forcer la recherche vers le haut (%u = Alt+U), puis valider (Entrée)
 alias -l hl_exec_jump_step2 {
+  var %cid = %hl_jump_cid
   var %chan = %hl_jump_chan
-  if ($window(%chan)) {
-    ; ^v = Coller le texte, {ENTER} = Valider la recherche, {ESC} = Fermer la boîte Find Text
-    hl_sendkeys ^v{ENTER}{ESC}
+  if ($scid(%cid).window(%chan)) {
+    scid %cid
+    ; ^a = tout sélectionner, ^v = coller le timestamp, %u = Alt+U (direction Up), {ENTER} = Valider la recherche
+    hl_sendkeys ^a^v%u{ENTER}
+    ; Étape 3 : fermer la boîte Find Text après que mIRC a scrollé sur la ligne
+    .timer_hl_jump3 -m 1 250 hl_exec_jump_step3
   }
+}
+
+; Étape 3 : fermer la boîte de recherche (Échap)
+alias -l hl_exec_jump_step3 {
+  hl_sendkeys {ESC}
 }
 
 ; ------------------------------------------------------------------------------
@@ -299,10 +355,9 @@ on ^*:HOTLINK:*:@Highlights: {
 ; Déclenchement automatique lors du DOUBLE-CLIC sur une ligne
 on *:HOTLINK:*:@Highlights: {
   haltdef
-  var %ln = $mouse.line
-  if (!%ln) %ln = $sline(@Highlights, 1).ln
-  if (%ln) hl_open_chan_at_hl %ln
-  else hl_open_chan_at_hl $hotline
+  var %line = $hotline
+  if (!%line) %line = %hl_last_clicked_line
+  if (%line) hl_open_chan_at_hl %line
 }
 
 ; Menu contextuel (clic-droit) sur la fenêtre @Highlights
@@ -311,12 +366,14 @@ menu @Highlights {
     var %ln = $mouse.line
     if (!%ln) %ln = $sline(@Highlights, 1).ln
     if (%ln) hl_open_chan_at_hl %ln
+    elseif (%hl_last_clicked_line) hl_open_chan_at_hl %hl_last_clicked_line
     else hl_open_chan_at_hl $hotline
   }
   Aller au salon et localiser le HL: {
     var %ln = $mouse.line
     if (!%ln) %ln = $sline(@Highlights, 1).ln
     if (%ln) hl_open_chan_at_hl %ln
+    elseif (%hl_last_clicked_line) hl_open_chan_at_hl %hl_last_clicked_line
     else hl_open_chan_at_hl $hotline
   }
   Ouvrir un PV avec le pseudo: {
