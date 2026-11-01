@@ -925,26 +925,32 @@ alias log_display_file {
   if (%sz > 1048576) %sz_str = $round($calc(%sz / 1048576), 2) Mo
   elseif (%sz > 1024) %sz_str = $round($calc(%sz / 1024), 2) Ko
 
-  var %tot_lines = $lines(%f)
   var %folder = $nofile(%f)
   if ($right(%folder, 1) == \) %folder = $left(%folder, -1)
   var %chan_or_net = $nopath(%folder)
   var %filename = $nopath(%f)
 
-  titlebar @Logs - $chr(91) $+ %chan_or_net $+ $chr(93) %filename ( $+ %sz_str $+ , %tot_lines lignes)
+  ; Vider la fenêtre et charger l'intégralité du fichier
   clear @Logs
-  aline @Logs $chr(3) $+ 03*** Affichage intégral du log : %filename ***
-  aline @Logs $chr(3) $+ 14Dossier : $nofile(%f)
-  aline @Logs $chr(3) $+ 14Taille : %sz_str $chr(124) Lignes totales du fichier : %tot_lines
-  aline @Logs $chr(3) $+ 14════════════════════════════════════════════════════════════════════════════════
-  
-  ; Chargement intégral garanti depuis la ligne 1 jusqu'à la dernière ligne
   var %load_target = $shortfn(%f)
   if (%load_target == $null) %load_target = %f
   loadbuf 1- -p @Logs $qt(%load_target)
-  
+
+  ; Nombre exact et réel de lignes du fichier chargées dans @Logs
+  var %tot_lines = $line(@Logs, 0)
+
+  ; Titre de fenêtre avec compte exact vérifié
+  titlebar @Logs - $chr(91) $+ %chan_or_net $+ $chr(93) %filename ( $+ %sz_str $+ , %tot_lines lignes)
+
+  ; Insertion de l'en-tête informatif au début
+  iline @Logs 1 $chr(3) $+ 03*** Affichage intégral du log : %filename ***
+  iline @Logs 2 $chr(3) $+ 14Dossier : $nofile(%f)
+  iline @Logs 3 $chr(3) $+ 14Taille : %sz_str $chr(124) Lignes de log : %tot_lines
+  iline @Logs 4 $chr(3) $+ 14════════════════════════════════════════════════════════════════════════════════
+
+  ; Pied de page
   aline @Logs $chr(3) $+ 14════════════════════════════════════════════════════════════════════════════════
-  aline @Logs $chr(3) $+ 03*** Fin du log (Total lignes dans @Logs : $line(@Logs, 0)) ***
+  aline @Logs $chr(3) $+ 03*** Fin du log (Total lignes de log : %tot_lines) ***
 }
 
 ; ------------------------------------------------------------------------------
