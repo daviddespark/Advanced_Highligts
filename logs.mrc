@@ -239,10 +239,11 @@ on *:dialog:log_dialog:sclick:57: {
 
   var %file = $log_find_latest_file(%net, %chan)
   if (%file != $null) && ($isfile(%file)) {
+    if ($dialog(log_dialog)) dialog -x log_dialog
     log_display_file %file
   }
   else {
-    noop $input(Aucun fichier log n'a encore été trouvé pour ' $+ %chan $+ ' sur ' $+ %net $+ '.$crlf $+ Les logs seront créés dès que des messages arriveront sur ce salon., o i, Aucun log trouvé)
+    echo -a $chr(3) $+ 04*** [Log Manager] Aucun fichier log trouvé pour ' $+ %chan $+ ' sur ' $+ %net $+ '.
   }
 }
 
@@ -552,9 +553,9 @@ alias -l log_viewer_populate_channels {
   did -r %d 21
   did -r %d 31
 
-  var %net_sel = $did(11).sel
+  var %net_sel = $did(%d, 11).sel
   if (%net_sel == $null) return
-  var %net = $did(11, %net_sel).text
+  var %net = $did(%d, 11, %net_sel).text
   var %net_dir = $log_root $+ %net $+ \
   if (!$isdir(%net_dir)) return
 
@@ -603,16 +604,16 @@ alias -l log_cb_add_chan_file {
 }
 
 alias -l log_viewer_populate_files {
-  if (!$dialog(log_viewer_dialog)) return
   var %d = log_viewer_dialog
+  if (!$dialog(%d)) return
   did -r %d 31
 
-  var %net_sel = $did(11).sel
-  var %chan_sel = $did(21).sel
+  var %net_sel = $did(%d, 11).sel
+  var %chan_sel = $did(%d, 21).sel
   if (%net_sel == $null) || (%chan_sel == $null) return
 
-  var %net = $did(11, %net_sel).text
-  var %chan = $did(21, %chan_sel).text
+  var %net = $did(%d, 11, %net_sel).text
+  var %chan = $did(%d, 21, %chan_sel).text
   var %net_dir = $log_root $+ %net $+ \
   var %chan_dir = %net_dir $+ %chan $+ \
 
@@ -661,23 +662,23 @@ alias -l log_cb_add_file {
 }
 
 alias -l log_viewer_get_selected_filepath {
-  if (!$dialog(log_viewer_dialog)) return $null
   var %d = log_viewer_dialog
-  var %net_sel = $did(11).sel
-  var %chan_sel = $did(21).sel
-  var %file_sel = $did(31).sel
+  if (!$dialog(%d)) return $null
+  var %net_sel = $did(%d, 11).sel
+  var %chan_sel = $did(%d, 21).sel
+  var %file_sel = $did(%d, 31).sel
   if (%net_sel == $null) || (%chan_sel == $null) || (%file_sel == $null) return $null
 
-  var %net = $did(11, %net_sel).text
-  var %chan = $did(21, %chan_sel).text
-  var %file = $did(31, %file_sel).text
+  var %net = $did(%d, 11, %net_sel).text
+  var %chan = $did(%d, 21, %chan_sel).text
+  var %file = $did(%d, 31, %file_sel).text
   if (%file == $null) || ($left(%file, 1) == () return $null
 
-  ; Tester chemin sous-dossier
+  ; 1. Tester chemin dans le sous-dossier
   var %p1 = $log_root $+ %net $+ \ $+ %chan $+ \ $+ %file
   if ($isfile(%p1)) return %p1
 
-  ; Tester chemin direct
+  ; 2. Tester chemin direct
   var %p2 = $log_root $+ %net $+ \ $+ %file
   if ($isfile(%p2)) return %p2
 
@@ -685,8 +686,8 @@ alias -l log_viewer_get_selected_filepath {
 }
 
 alias -l log_viewer_update_file_info {
-  if (!$dialog(log_viewer_dialog)) return
   var %d = log_viewer_dialog
+  if (!$dialog(%d)) return
   var %f = $log_viewer_get_selected_filepath
   if (%f != $null) && ($isfile(%f)) {
     var %sz = $file(%f).size
@@ -704,10 +705,11 @@ alias -l log_viewer_update_file_info {
 alias -l log_viewer_display_selected {
   var %f = $log_viewer_get_selected_filepath
   if (%f != $null) && ($isfile(%f)) {
+    if ($dialog(log_viewer_dialog)) dialog -x log_viewer_dialog
     log_display_file %f
   }
   else {
-    noop $input(Veuillez sélectionner un fichier log valide dans la liste., o w, Fichier requis)
+    echo -a $chr(3) $+ 04*** [Log Viewer] Veuillez d'abord sélectionner un fichier log dans la colonne 3.
   }
 }
 
@@ -764,9 +766,7 @@ alias log_display_file {
   if (!$window(@Logs)) {
     window -e @Logs
   }
-  else {
-    window -a @Logs
-  }
+  window -a @Logs
 
   var %sz = $file(%f).size
   var %sz_str = %sz octets
@@ -779,8 +779,8 @@ alias log_display_file {
   aline @Logs $chr(3) $+ 14Réseau / Dossier : $nofile(%f)
   aline @Logs $chr(3) $+ 14════════════════════════════════════════════════════════════════════════════════
   
-  ; Chargement ultra-rapide de l'intégralité du fichier
-  loadbuf @Logs $qt(%f)
+  ; Chargement ultra-rapide de l'intégralité du fichier avec couleurs
+  loadbuf -p @Logs $qt(%f)
   
   aline @Logs $chr(3) $+ 14════════════════════════════════════════════════════════════════════════════════
   aline @Logs $chr(3) $+ 03*** Fin du log (Total lignes affichées : $line(@Logs, 0)) ***
@@ -940,11 +940,11 @@ alias -l log_dialog_refresh_list {
 }
 
 alias -l log_dialog_load_selected_line {
-  if (!$dialog(log_dialog)) return
   var %d = log_dialog
-  var %sel = $did(10).sel
+  if (!$dialog(%d)) return
+  var %sel = $did(%d, 10).sel
   if (%sel == $null) return
-  var %text = $did(10, %sel).text
+  var %text = $did(%d, 10, %sel).text
   if (%text == $null) || ($left(%text, 1) != [) return
 
   var %net = $null, %chan = $null
@@ -960,8 +960,8 @@ alias -l log_dialog_load_selected_line {
   }
   else {
     var %idx = 1
-    while (%idx <= $did(21).lines) {
-      if ($did(21, %idx).text == %net) {
+    while (%idx <= $did(%d, 21).lines) {
+      if ($did(%d, 21, %idx).text == %net) {
         did -c %d 21 %idx
         break
       }
@@ -984,9 +984,10 @@ alias -l log_dialog_load_selected_line {
 
 alias -l log_dialog_toggle_selected {
   var %d = log_dialog
-  var %sel = $did(10).sel
+  if (!$dialog(%d)) return
+  var %sel = $did(%d, 10).sel
   if (%sel == $null) return
-  var %text = $did(10, %sel).text
+  var %text = $did(%d, 10, %sel).text
   if (%text == $null) || ($left(%text, 1) != [) return
 
   var %net = $null, %chan = $null
@@ -1048,8 +1049,8 @@ alias -l log_dialog_load_target {
   var %timestamp = $readini(%f, %sec, timestamp)
 
   var %idx = 1
-  while (%idx <= $did(21).lines) {
-    if ($did(21, %idx).text == %net) {
+  while (%idx <= $did(%d, 21).lines) {
+    if ($did(%d, 21, %idx).text == %net) {
       did -c %d 21 %idx
       break
     }
@@ -1086,8 +1087,8 @@ alias -l log_dialog_load_target {
   else did -c %d 33
 
   var %t_idx = 1
-  while (%t_idx <= $did(37).lines) {
-    if ($did(37, %t_idx).text == %timestamp) {
+  while (%t_idx <= $did(%d, 37).lines) {
+    if ($did(%d, 37, %t_idx).text == %timestamp) {
       did -c %d 37 %t_idx
       break
     }
