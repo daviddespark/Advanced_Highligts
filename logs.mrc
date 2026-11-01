@@ -428,25 +428,34 @@ on *:dialog:log_viewer_dialog:close:0: {
   if ($hget(log_chan_h)) hfree log_chan_h
   if ($hget(log_files_h)) hfree log_files_h
   unset %log_pop_chan %log_pop_chan_dir %log_latest_target %log_latest_chan_dir %log_latest_best_file %log_latest_best_time
+  unset %log_v_net %log_v_chan %log_v_file
 }
 
 ; Clic sur un réseau dans la colonne 1
 on *:dialog:log_viewer_dialog:sclick:11: {
+  var %s = $did(11).sel
+  if (%s isnum 1-) set %log_v_net $did(11, %s).text
   log_viewer_populate_channels
 }
 
 ; Clic sur un salon dans la colonne 2
 on *:dialog:log_viewer_dialog:sclick:21: {
+  var %s = $did(21).sel
+  if (%s isnum 1-) set %log_v_chan $did(21, %s).text
   log_viewer_populate_files
 }
 
 ; Clic sur un fichier dans la colonne 3
 on *:dialog:log_viewer_dialog:sclick:31: {
+  var %s = $did(31).sel
+  if (%s isnum 1-) set %log_v_file $did(31, %s).text
   log_viewer_update_file_info
 }
 
 ; Double-clic sur un fichier dans la colonne 3 : affichage direct dans @Logs
 on *:dialog:log_viewer_dialog:dclick:31: {
+  var %s = $did(31).sel
+  if (%s isnum 1-) set %log_v_file $did(31, %s).text
   log_viewer_display_selected
 }
 
@@ -532,6 +541,7 @@ alias -l log_viewer_populate_networks {
       inc %k
     }
     did -c %d 11 %sel
+    set %log_v_net $did(%d, 11, %sel).text
     log_viewer_populate_channels
   }
   else {
@@ -553,9 +563,12 @@ alias -l log_viewer_populate_channels {
   did -r %d 21
   did -r %d 31
 
-  var %net = $did(%d, 11).seltext
-  if (%net == $null) && ($did(%d, 11).sel) %net = $did(%d, 11, $did(%d, 11).sel)
+  var %s = $did(%d, 11).sel
+  var %net = $null
+  if (%s isnum 1-) %net = $did(%d, 11, %s).text
+  if (%net == $null) %net = %log_v_net
   if (%net == $null) || ($left(%net, 1) == () return
+  set %log_v_net %net
   var %net_dir = $log_root $+ %net $+ \
   if (!$isdir(%net_dir)) return
 
@@ -573,9 +586,12 @@ alias -l log_viewer_populate_channels {
 
   if ($did(%d, 21).lines > 0) {
     did -c %d 21 1
+    set %log_v_chan $did(%d, 21, 1).text
     log_viewer_populate_files
   }
   else {
+    set %log_v_chan $null
+    set %log_v_file $null
     did -a %d 21 (Aucun salon trouvé)
   }
 }
@@ -608,12 +624,19 @@ alias -l log_viewer_populate_files {
   if (!$dialog(%d)) return
   did -r %d 31
 
-  var %net = $did(%d, 11).seltext
-  if (%net == $null) && ($did(%d, 11).sel) %net = $did(%d, 11, $did(%d, 11).sel)
-  var %chan = $did(%d, 21).seltext
-  if (%chan == $null) && ($did(%d, 21).sel) %chan = $did(%d, 21, $did(%d, 21).sel)
+  var %net = %log_v_net
+  var %s1 = $did(%d, 11).sel
+  if (%s1 isnum 1-) %net = $did(%d, 11, %s1).text
+
+  var %chan = $null
+  var %s2 = $did(%d, 21).sel
+  if (%s2 isnum 1-) %chan = $did(%d, 21, %s2).text
+  if (%chan == $null) %chan = %log_v_chan
 
   if (%net == $null) || (%chan == $null) || ($left(%chan, 1) == () return
+  set %log_v_net %net
+  set %log_v_chan %chan
+
   var %net_dir = $log_root $+ %net $+ \
   var %chan_dir = %net_dir $+ %chan $+ \
 
@@ -642,9 +665,11 @@ alias -l log_viewer_populate_files {
   if ($did(%d, 31).lines > 0) {
     ; Sélectionner le dernier fichier (souvent le plus récent)
     did -c %d 31 $did(%d, 31).lines
+    set %log_v_file $did(%d, 31, $did(%d, 31).lines).text
     log_viewer_update_file_info
   }
   else {
+    set %log_v_file $null
     did -a %d 31 (Aucun fichier log)
     did -ra %d 50 Aucun log trouvé pour ce salon.
   }
@@ -665,14 +690,17 @@ alias -l log_viewer_get_selected_filepath {
   var %d = log_viewer_dialog
   if (!$dialog(%d)) return $null
 
-  var %net = $did(%d, 11).seltext
-  if (%net == $null) && ($did(%d, 11).sel) %net = $did(%d, 11, $did(%d, 11).sel)
+  var %net = %log_v_net
+  var %s1 = $did(%d, 11).sel
+  if (%s1 isnum 1-) %net = $did(%d, 11, %s1).text
 
-  var %chan = $did(%d, 21).seltext
-  if (%chan == $null) && ($did(%d, 21).sel) %chan = $did(%d, 21, $did(%d, 21).sel)
+  var %chan = %log_v_chan
+  var %s2 = $did(%d, 21).sel
+  if (%s2 isnum 1-) %chan = $did(%d, 21, %s2).text
 
-  var %file = $did(%d, 31).seltext
-  if (%file == $null) && ($did(%d, 31).sel) %file = $did(%d, 31, $did(%d, 31).sel)
+  var %file = %log_v_file
+  var %s3 = $did(%d, 31).sel
+  if (%s3 isnum 1-) %file = $did(%d, 31, %s3).text
 
   if (%net == $null) || (%chan == $null) || (%file == $null) return $null
   if ($left(%file, 1) == () return $null
