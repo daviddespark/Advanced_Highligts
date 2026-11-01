@@ -900,7 +900,7 @@ alias -l log_find_latest_file {
   return %best_file
 }
 
-; Affiche un fichier log dans la fenêtre @Logs avec loadbuf ultra-rapide
+; Affiche un fichier log dans la fenêtre @Logs avec loadbuf ultra-rapide et buffer illimité
 alias log_display_file {
   var %f = $1-
   if (%f == $null) || (!$isfile(%f)) {
@@ -910,8 +910,12 @@ alias log_display_file {
 
   set %log_current_file %f
 
+  ; Création ou extension du buffer à 1 000 000 de lignes pour afficher l'intégralité sans troncature
   if (!$window(@Logs)) {
-    window -e @Logs
+    window -e -j1000000 @Logs
+  }
+  else {
+    window -j1000000 @Logs
   }
   window -a @Logs
   window -w2 @Logs
@@ -921,17 +925,22 @@ alias log_display_file {
   if (%sz > 1048576) %sz_str = $round($calc(%sz / 1048576), 2) Mo
   elseif (%sz > 1024) %sz_str = $round($calc(%sz / 1024), 2) Ko
 
-  titlebar @Logs - [ $+ $nopath($nofile(%f)) $+ ] $nopath(%f) ( $+ %sz_str $+ )
+  var %tot_lines = $lines(%f)
+
+  titlebar @Logs - [ $+ $nopath($nofile(%f)) $+ ] $nopath(%f) ( $+ %sz_str $+ , %tot_lines lignes)
   clear @Logs
-  aline @Logs $chr(3) $+ 03*** Affichage du log : $nopath(%f) ***
+  aline @Logs $chr(3) $+ 03*** Affichage intégral du log : $nopath(%f) ***
   aline @Logs $chr(3) $+ 14Réseau / Dossier : $nofile(%f)
+  aline @Logs $chr(3) $+ 14Taille : %sz_str $chr(124) Lignes totales du fichier : %tot_lines
   aline @Logs $chr(3) $+ 14════════════════════════════════════════════════════════════════════════════════
   
-  ; Chargement ultra-rapide de l'intégralité du fichier avec couleurs
-  loadbuf -p @Logs $qt(%f)
+  ; Chargement intégral garanti depuis la ligne 1 jusqu'à la dernière ligne
+  var %load_target = $shortfn(%f)
+  if (%load_target == $null) %load_target = %f
+  loadbuf 1- -p @Logs $qt(%load_target)
   
   aline @Logs $chr(3) $+ 14════════════════════════════════════════════════════════════════════════════════
-  aline @Logs $chr(3) $+ 03*** Fin du log (Total lignes affichées : $line(@Logs, 0)) ***
+  aline @Logs $chr(3) $+ 03*** Fin du log (Total lignes dans @Logs : $line(@Logs, 0)) ***
 }
 
 ; ------------------------------------------------------------------------------
@@ -939,6 +948,14 @@ alias log_display_file {
 ; ------------------------------------------------------------------------------
 menu @Logs {
   Parcourir d'autres logs (Visionneuse)...:log_viewer_open
+  -
+  Haut du fichier (Début):sline @Logs 1
+  Bas du fichier (Fin):sline @Logs $line(@Logs, 0)
+  -
+  Rechercher du texte (Ctrl+F): {
+    var %txt = $input(Texte à rechercher dans les logs affichés :, e, Recherche de texte)
+    if (%txt != $null) findtext %txt
+  }
   -
   Recharger ce log: {
     if ($isfile(%log_current_file)) log_display_file %log_current_file
@@ -949,11 +966,6 @@ menu @Logs {
   Ouvrir le dossier dans l'Explorateur: {
     if ($isfile(%log_current_file)) run explorer.exe /select, $qt(%log_current_file)
     else run explorer.exe $qt($log_root)
-  }
-  -
-  Rechercher du texte (Ctrl+F): {
-    var %txt = $input(Texte à rechercher dans les logs affichés :, e, Recherche de texte)
-    if (%txt != $null) findtext %txt
   }
   -
   Vider cette fenêtre:clear @Logs
