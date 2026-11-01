@@ -240,12 +240,12 @@ alias -l hl_find_chan_cid {
 ; Alias d'ouverture du salon et de positionnement à l'endroit exact du Highlight par Timestamp (Multi-serveur)
 alias -l hl_open_chan_at_hl {
   var %line = $null
-  if ($1 isnum && $window(@Highlights)) {
+  if ($1 isnum) && ($window(@Highlights)) {
     %line = $line(@Highlights, $1)
   }
-  if (!%line) %line = $1-
+  if (%line == $null) %line = $1-
   %line = $strip(%line)
-  if (!%line) return
+  if (%line == $null) return
   
   ; 1. Extraction du timestamp [HH:nn:ss], du réseau éventuel et du salon [#salon]
   var %time = $null
@@ -270,11 +270,11 @@ alias -l hl_open_chan_at_hl {
     if ($regex(%line, /\[([^\]\s#]+)\]\s+\[#/)) %net = $regml(1)
   }
   
-  if (!%chan || !%time) return
+  if (%chan == $null) || (%time == $null) return
   
   ; 2. Trouver le bon serveur (Connection ID / $cid) pour ce salon
   var %cid = $hl_find_chan_cid(%chan, %net)
-  if (!%cid) %cid = $cid
+  if (%cid == $null) %cid = $cid
   
   ; Basculer le contexte sur le bon serveur
   scid %cid
@@ -347,25 +347,25 @@ on ^*:HOTLINK:*:@Highlights: {
 on *:HOTLINK:*:@Highlights: {
   haltdef
   var %line = $hotline
-  if (!%line) %line = %hl_last_clicked_line
-  if (%line) hl_open_chan_at_hl %line
+  if (%line == $null) %line = %hl_last_clicked_line
+  if (%line != $null) hl_open_chan_at_hl %line
 }
 
 ; Menu contextuel (clic-droit) sur la fenêtre @Highlights
 menu @Highlights {
   dclick: {
     var %ln = $mouse.line
-    if (!%ln) %ln = $sline(@Highlights, 1).ln
-    if (%ln) hl_open_chan_at_hl %ln
-    elseif (%hl_last_clicked_line) hl_open_chan_at_hl %hl_last_clicked_line
-    else hl_open_chan_at_hl $hotline
+    if (%ln == $null) %ln = $sline(@Highlights, 1).ln
+    if (%ln != $null) hl_open_chan_at_hl %ln
+    elseif (%hl_last_clicked_line != $null) hl_open_chan_at_hl %hl_last_clicked_line
+    elseif ($hotline != $null) hl_open_chan_at_hl $hotline
   }
   Aller au salon et localiser le HL: {
     var %ln = $mouse.line
-    if (!%ln) %ln = $sline(@Highlights, 1).ln
-    if (%ln) hl_open_chan_at_hl %ln
-    elseif (%hl_last_clicked_line) hl_open_chan_at_hl %hl_last_clicked_line
-    else hl_open_chan_at_hl $hotline
+    if (%ln == $null) %ln = $sline(@Highlights, 1).ln
+    if (%ln != $null) hl_open_chan_at_hl %ln
+    elseif (%hl_last_clicked_line != $null) hl_open_chan_at_hl %hl_last_clicked_line
+    elseif ($hotline != $null) hl_open_chan_at_hl $hotline
   }
   Ouvrir un PV avec le pseudo: {
     var %line = $hotline
