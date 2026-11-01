@@ -836,7 +836,7 @@ alias -l log_viewer_update_file_info {
     if (%sz > 1048576) %sz_str = $round($calc(%sz / 1048576), 2) Mo
     elseif (%sz > 1024) %sz_str = $round($calc(%sz / 1024), 2) Ko
     var %mtime = $asctime($file(%f).mtime, dd/mm/yyyy à HH:nn:ss)
-    did -ra %d 50 Fichier : $nopath(%f) | Taille : %sz_str | Modifié le : %mtime
+    did -ra %d 50 Fichier : $nopath(%f) $chr(124) Taille : %sz_str $chr(124) Modifié le : %mtime
   }
   else {
     var %cur_chan = %log_v_chan
