@@ -395,11 +395,11 @@ dialog log_viewer_dialog {
 
   ; Colonne 1 : Réseaux / Dossiers
   box "1. Réseau / Serveur", 10, 14 74 210 392
-  list 11, 24 98 190 356, vsbar
+  list 11, 24 98 190 356, vsbar, sort
 
   ; Colonne 2 : Salons & Cibles
   box "2. Salons & Cibles", 20, 234 74 230 392
-  list 21, 244 98 210 356, vsbar
+  list 21, 244 98 210 356, vsbar, sort
 
   ; Colonne 3 : Fichiers et Dates disponibles
   box "3. Fichiers & Dates de logs", 30, 474 74 352 392
@@ -527,20 +527,16 @@ alias -l log_viewer_populate_networks {
   var %root = $log_root
   if (!$isdir(%root)) mkdir $qt(%root)
 
-  if ($window(@log_temp_net)) window -c @log_temp_net
-  window -hn @log_temp_net
-  noop $finddir(%root, *, 0, 1, @log_temp_net)
-
-  var %tot = $line(@log_temp_net, 0)
+  var %tot = $finddir($shortfn(%root), *, 0, 1)
   var %i = 1
   while (%i <= %tot) {
-    var %net_name = $nopath($line(@log_temp_net, %i))
+    var %dpath = $finddir($shortfn(%root), *, %i, 1)
+    var %net_name = $nopath(%dpath)
     if (%net_name != $null) {
       did -a %d 11 %net_name
     }
     inc %i
   }
-  window -c @log_temp_net
 
   if ($did(%d, 11).lines > 0) {
     ; Tenter de sélectionner le réseau actif ou le premier
@@ -579,15 +575,11 @@ alias -l log_viewer_populate_channels {
   if ($hget(log_chan_h)) hfree log_chan_h
   hmake log_chan_h 200
 
-  if ($window(@log_temp_ch)) window -c @log_temp_ch
-  window -hn @log_temp_ch
-
   ; 1. Trouver les sous-dossiers de salons
-  noop $finddir(%net_dir, *, 0, 1, @log_temp_ch)
-  var %tot_dirs = $line(@log_temp_ch, 0)
+  var %tot_dirs = $finddir($shortfn(%net_dir), *, 0, 1)
   var %i = 1
   while (%i <= %tot_dirs) {
-    var %ch_dir = $nopath($line(@log_temp_ch, %i))
+    var %ch_dir = $nopath($finddir($shortfn(%net_dir), *, %i, 1))
     if (%ch_dir != $null) && (!$hget(log_chan_h, %ch_dir)) {
       hadd log_chan_h %ch_dir 1
       did -a %d 21 %ch_dir
@@ -595,10 +587,31 @@ alias -l log_viewer_populate_channels {
     inc %i
   }
 
-  ; 2. Scanner les fichiers logs directs (#salon.date.log) pour extraire les salons
-  clear @log_temp_ch
-  noop $findfile(%net_dir, *.log, 0, 1, @log_temp_ch)
+  ; 2. Ajouter les salons actuellement rejoints sur ce réseau
+  var %sc = 1
+  while (%sc <= $scon(0)) {
+    scon %sc
+    if ($network == %net) || ($server == %net) {
+      var %c = 1
+      while (%c <= $chan(0)) {
+        var %cn = $chan(%c)
+        if (!$hget(log_chan_h, %cn)) {
+          hadd log_chan_h %cn 1
+          did -a %d 21 %cn
+        }
+        inc %c
+      }
+    }
+    inc %sc
+  }
+  scon -r
+
+  ; 3. Scanner les fichiers logs directs (#salon.date.log) pour extraire les salons
+  if ($window(@log_temp_ch)) window -c @log_temp_ch
+  window -hns @log_temp_ch
+  noop $findfile($shortfn(%net_dir), *.log, 0, 1, aline @log_temp_ch $!1-)
   var %tot_files = $line(@log_temp_ch, 0)
+  var %last_ch = $null
   var %j = 1
   while (%j <= %tot_files) {
     var %fn = $nopath($line(@log_temp_ch, %j))
@@ -609,9 +622,12 @@ alias -l log_viewer_populate_channels {
     elseif ($regex(%fn, /^([^._]+)/)) {
       %ch_name = $regml(1)
     }
-    if (%ch_name != $null) && (!$hget(log_chan_h, %ch_name)) {
-      hadd log_chan_h %ch_name 1
-      did -a %d 21 %ch_name
+    if (%ch_name != $null) && (%ch_name != %last_ch) {
+      %last_ch = %ch_name
+      if (!$hget(log_chan_h, %ch_name)) {
+        hadd log_chan_h %ch_name 1
+        did -a %d 21 %ch_name
+      }
     }
     inc %j
   }
@@ -628,6 +644,7 @@ alias -l log_viewer_populate_channels {
     set %log_v_chan $null
     set %log_v_file $null
     did -a %d 21 (Aucun salon trouvé)
+    did -a %d 31 (Aucun fichier log)
   }
 }
 
@@ -655,37 +672,49 @@ alias -l log_viewer_populate_files {
   if ($hget(log_files_h)) hfree log_files_h
   hmake log_files_h 200
 
-  if ($window(@log_temp_f)) window -c @log_temp_f
-  window -hn @log_temp_f
-
   ; 1. Chercher dans le sous-dossier dédié (s'il existe)
   if ($isdir(%chan_dir)) {
-    noop $findfile(%chan_dir, *.log, 0, 1, @log_temp_f)
+    var %tot_cf = $findfile($shortfn(%chan_dir), *.log, 0, 1)
+    var %i = 1
+    while (%i <= %tot_cf) {
+      var %fn = $nopath($findfile($shortfn(%chan_dir), *.log, %i, 1))
+      if (%fn != $null) && (!$hget(log_files_h, %fn)) {
+        hadd log_files_h %fn 1
+        did -a %d 31 %fn
+      }
+      inc %i
+    }
   }
 
   ; 2. Chercher aussi dans le dossier réseau direct (%chan*.log)
   if ($isdir(%net_dir)) {
-    noop $findfile(%net_dir, %chan $+ *.log, 0, 1, @log_temp_f)
-    if ($line(@log_temp_f, 0) == 0) && ($regex(%chan, /^[#&]/)) {
-      noop $findfile(%net_dir, * $+ $mid(%chan, 2) $+ *.log, 0, 1, @log_temp_f)
+    var %tot_nf = $findfile($shortfn(%net_dir), %chan $+ *.log, 0, 1)
+    var %k = 1
+    while (%k <= %tot_nf) {
+      var %fn2 = $nopath($findfile($shortfn(%net_dir), %chan $+ *.log, %k, 1))
+      if (%fn2 != $null) && (!$hget(log_files_h, %fn2)) {
+        hadd log_files_h %fn2 1
+        did -a %d 31 %fn2
+      }
+      inc %k
     }
-  }
 
-  var %tot_f = $line(@log_temp_f, 0)
-  var %k = 1
-  while (%k <= %tot_f) {
-    var %fp = $line(@log_temp_f, %k)
-    var %fn = $nopath(%fp)
-    if ($nofile(%fp) == %chan_dir) || ($regex(%fn, /^\Q $+ %chan $+ \E[._]/i)) {
-      if (!$hget(log_files_h, %fn)) {
-        hadd log_files_h %fn 1
-        did -a %d 31 %fn
+    ; Si rien trouvé et commence par # ou &, chercher aussi sans le symbole
+    if ($did(%d, 31).lines == 0) && ($regex(%chan, /^[#&]/)) {
+      var %raw_name = $mid(%chan, 2)
+      var %tot_nf2 = $findfile($shortfn(%net_dir), %raw_name $+ *.log, 0, 1)
+      var %m = 1
+      while (%m <= %tot_nf2) {
+        var %fn3 = $nopath($findfile($shortfn(%net_dir), %raw_name $+ *.log, %m, 1))
+        if (%fn3 != $null) && (!$hget(log_files_h, %fn3)) {
+          hadd log_files_h %fn3 1
+          did -a %d 31 %fn3
+        }
+        inc %m
       }
     }
-    inc %k
   }
 
-  window -c @log_temp_f
   if ($hget(log_files_h)) hfree log_files_h
 
   if ($did(%d, 31).lines > 0) {
@@ -751,7 +780,6 @@ alias -l log_viewer_update_file_info {
 alias -l log_viewer_display_selected {
   var %f = $log_viewer_get_selected_filepath
   if (%f != $null) && ($isfile(%f)) {
-    if ($dialog(log_viewer_dialog)) dialog -x log_viewer_dialog
     log_display_file %f
   }
   else {
@@ -759,7 +787,7 @@ alias -l log_viewer_display_selected {
   }
 }
 
-; Recherche le fichier log le plus récent pour un réseau et un salon donnés (Ultra-rapide en 1 seule passe)
+; Recherche le fichier log le plus récent pour un réseau et un salon donnés
 alias -l log_find_latest_file {
   var %net = $1
   var %chan = $2
@@ -769,38 +797,36 @@ alias -l log_find_latest_file {
   var %best_file = $null
   var %best_time = 0
 
-  if ($window(@log_temp_fl)) window -c @log_temp_fl
-  window -hn @log_temp_fl
-
   ; Chercher dans le sous-dossier
   if ($isdir(%chan_dir)) {
-    noop $findfile(%chan_dir, *.log, 0, 1, @log_temp_fl)
-  }
-
-  ; Chercher aussi en direct dans le dossier réseau
-  if ($isdir(%net_dir)) {
-    noop $findfile(%net_dir, %chan $+ *.log, 0, 1, @log_temp_fl)
-    if ($line(@log_temp_fl, 0) == 0) && ($regex(%chan, /^[#&]/)) {
-      noop $findfile(%net_dir, * $+ $mid(%chan, 2) $+ *.log, 0, 1, @log_temp_fl)
-    }
-  }
-
-  var %tot = $line(@log_temp_fl, 0)
-  var %i = 1
-  while (%i <= %tot) {
-    var %fp = $line(@log_temp_fl, %i)
-    var %fn = $nopath(%fp)
-    if ($nofile(%fp) == %chan_dir) || ($regex(%fn, /^\Q $+ %chan $+ \E[._]/i)) {
+    var %tot_cf = $findfile($shortfn(%chan_dir), *.log, 0, 1)
+    var %i = 1
+    while (%i <= %tot_cf) {
+      var %fp = $findfile($shortfn(%chan_dir), *.log, %i, 1)
       var %mt = $file(%fp).mtime
       if (%mt > %best_time) {
         %best_time = %mt
         %best_file = %fp
       }
+      inc %i
     }
-    inc %i
   }
 
-  window -c @log_temp_fl
+  ; Chercher aussi en direct dans le dossier réseau (%chan*.log)
+  if ($isdir(%net_dir)) {
+    var %tot_nf = $findfile($shortfn(%net_dir), %chan $+ *.log, 0, 1)
+    var %k = 1
+    while (%k <= %tot_nf) {
+      var %fp2 = $findfile($shortfn(%net_dir), %chan $+ *.log, %k, 1)
+      var %mt2 = $file(%fp2).mtime
+      if (%mt2 > %best_time) {
+        %best_time = %mt2
+        %best_file = %fp2
+      }
+      inc %k
+    }
+  }
+
   return %best_file
 }
 
