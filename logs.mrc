@@ -18,7 +18,24 @@ alias -l log_dir {
 }
 
 alias -l log_root {
-  return $shortfn($mircdir $+ logs) $+ \
+  var %p = $mircdirlogs
+  var %s = $shortfn(%p)
+  if (%s != $null) return %s
+  return %p
+}
+
+alias -l log_net_dir {
+  var %p = $log_root $+ \ $+ $1
+  var %s = $shortfn(%p)
+  if (%s != $null) return %s
+  return %p
+}
+
+alias -l log_chan_dir {
+  var %p = $log_net_dir($1) $+ \ $+ $2
+  var %s = $shortfn(%p)
+  if (%s != $null) return %s
+  return %p
 }
 
 alias -l log_sec {
@@ -539,29 +556,25 @@ alias -l log_viewer_populate_networks {
   var %root = $log_root
   if (!$isdir(%root)) mkdir $qt(%root)
 
-  var %tot = $finddir($shortfn(%root), *, 0, 1)
+  var %tot = $finddir(%root, *, 0, 1)
   var %i = 1
   while (%i <= %tot) {
-    var %dpath = $finddir($shortfn(%root), *, %i, 1)
+    var %dpath = $finddir(%root, *, %i, 1)
     var %net_name = $nopath(%dpath)
-    if (%net_name != $null) {
-      did -a %d 11 %net_name
-    }
+    if (%net_name != $null) did -a %d 11 %net_name
     inc %i
   }
 
   if ($did(%d, 11).lines > 0) {
-    ; Tenter de sélectionner le réseau actif ou le premier
     var %cur_net = $network
     var %sel = 1
     var %k = 1
     while (%k <= $did(%d, 11).lines) {
-      if ($did(%d, 11, %k).text == %cur_net) { %sel = %k | break }
+      if ($did(%d, 11, %k) == %cur_net) { %sel = %k | break }
       inc %k
     }
     did -c %d 11 %sel
-    var %sel_net = $did(%d, 11, %sel).text
-    if (%sel_net == $null) %sel_net = $did(%d, 11, %sel)
+    var %sel_net = $did(%d, 11, %sel)
     set %log_v_net %sel_net
     log_viewer_populate_channels %sel_net
   }
@@ -577,17 +590,20 @@ alias -l log_viewer_populate_channels {
   did -r %d 31
 
   var %net = $1
+  if (%net == $null) %net = $did(%d, 11).seltext
   if (%net == $null) {
     var %s = $did(%d, 11).sel
-    if (%s isnum 1-) %net = $did(%d, 11, %s).text
-    if (%net == $null) && (%s isnum 1-) %net = $did(%d, 11, %s)
+    if (%s isnum 1-) %net = $did(%d, 11, %s)
   }
   if (%net == $null) %net = %log_v_net
   if (%net == $null) || ($left(%net, 1) == () return
   set %log_v_net %net
 
-  var %net_dir = $shortfn($log_root $+ %net) $+ \
-  if (!$isdir(%net_dir)) return
+  var %net_dir = $log_net_dir(%net)
+  if (!$isdir(%net_dir)) {
+    did -a %d 21 (Dossier réseau absent)
+    return
+  }
 
   ; Table de hachage temporaire pour unicité instantanée O(1)
   if ($hget(log_chan_h)) hfree log_chan_h
@@ -651,7 +667,7 @@ alias -l log_viewer_populate_channels {
 
   if ($did(%d, 21).lines > 0) {
     did -c %d 21 1
-    var %first_chan = $did(%d, 21, 1).text
+    var %first_chan = $did(%d, 21).seltext
     if (%first_chan == $null) %first_chan = $did(%d, 21, 1)
     set %log_v_chan %first_chan
     log_viewer_populate_files %first_chan
@@ -670,24 +686,26 @@ alias -l log_viewer_populate_files {
   did -r %d 31
 
   var %chan = $1
+  if (%chan == $null) %chan = $did(%d, 21).seltext
   if (%chan == $null) {
     var %s2 = $did(%d, 21).sel
-    if (%s2 isnum 1-) %chan = $did(%d, 21, %s2).text
-    if (%chan == $null) && (%s2 isnum 1-) %chan = $did(%d, 21, %s2)
+    if (%s2 isnum 1-) %chan = $did(%d, 21, %s2)
   }
   if (%chan == $null) %chan = %log_v_chan
 
   var %net = %log_v_net
-  var %s1 = $did(%d, 11).sel
-  if (%s1 isnum 1-) %net = $did(%d, 11, %s1).text
-  if (%net == $null) && (%s1 isnum 1-) %net = $did(%d, 11, %s1)
+  if (%net == $null) %net = $did(%d, 11).seltext
+  if (%net == $null) {
+    var %s1 = $did(%d, 11).sel
+    if (%s1 isnum 1-) %net = $did(%d, 11, %s1)
+  }
 
   if (%net == $null) || (%chan == $null) || ($left(%chan, 1) == () return
   set %log_v_net %net
   set %log_v_chan %chan
 
-  var %net_dir = $shortfn($log_root $+ %net) $+ \
-  var %chan_dir = $shortfn(%net_dir $+ %chan) $+ \
+  var %net_dir = $log_net_dir(%net)
+  var %chan_dir = $log_chan_dir(%net, %chan)
 
   if ($hget(log_files_h)) hfree log_files_h
   hmake log_files_h 200
@@ -738,9 +756,8 @@ alias -l log_viewer_populate_files {
   if ($hget(log_files_h)) hfree log_files_h
 
   if ($did(%d, 31).lines > 0) {
-    ; Sélectionner le dernier fichier (souvent le plus récent)
     did -c %d 31 $did(%d, 31).lines
-    var %sel_f = $did(%d, 31, $did(%d, 31).lines).text
+    var %sel_f = $did(%d, 31).seltext
     if (%sel_f == $null) %sel_f = $did(%d, 31, $did(%d, 31).lines)
     set %log_v_file %sel_f
     log_viewer_update_file_info
@@ -757,30 +774,36 @@ alias -l log_viewer_get_selected_filepath {
   if (!$dialog(%d)) return $null
 
   var %net = %log_v_net
-  var %s1 = $did(%d, 11).sel
-  if (%s1 isnum 1-) %net = $did(%d, 11, %s1).text
-  if (%net == $null) && (%s1 isnum 1-) %net = $did(%d, 11, %s1)
+  if (%net == $null) %net = $did(%d, 11).seltext
+  if (%net == $null) {
+    var %s1 = $did(%d, 11).sel
+    if (%s1 isnum 1-) %net = $did(%d, 11, %s1)
+  }
 
   var %chan = %log_v_chan
-  var %s2 = $did(%d, 21).sel
-  if (%s2 isnum 1-) %chan = $did(%d, 21, %s2).text
-  if (%chan == $null) && (%s2 isnum 1-) %chan = $did(%d, 21, %s2)
+  if (%chan == $null) %chan = $did(%d, 21).seltext
+  if (%chan == $null) {
+    var %s2 = $did(%d, 21).sel
+    if (%s2 isnum 1-) %chan = $did(%d, 21, %s2)
+  }
 
   var %file = %log_v_file
-  var %s3 = $did(%d, 31).sel
-  if (%s3 isnum 1-) %file = $did(%d, 31, %s3).text
-  if (%file == $null) && (%s3 isnum 1-) %file = $did(%d, 31, %s3)
+  if (%file == $null) %file = $did(%d, 31).seltext
+  if (%file == $null) {
+    var %s3 = $did(%d, 31).sel
+    if (%s3 isnum 1-) %file = $did(%d, 31, %s3)
+  }
 
   if (%net == $null) || (%chan == $null) || (%file == $null) return $null
   if ($left(%file, 1) == () return $null
 
   ; 1. Tester chemin dans le sous-dossier
-  var %p1 = $shortfn($log_root $+ %net) $+ \ $+ %chan $+ \ $+ %file
+  var %p1 = $log_chan_dir(%net, %chan) $+ \ $+ %file
   if ($isfile(%p1)) return %p1
   if ($isfile($shortfn(%p1))) return $shortfn(%p1)
 
   ; 2. Tester chemin direct
-  var %p2 = $shortfn($log_root $+ %net) $+ \ $+ %file
+  var %p2 = $log_net_dir(%net) $+ \ $+ %file
   if ($isfile(%p2)) return %p2
   if ($isfile($shortfn(%p2))) return $shortfn(%p2)
 
@@ -818,18 +841,18 @@ alias -l log_viewer_display_selected {
 alias -l log_find_latest_file {
   var %net = $1
   var %chan = $2
-  var %net_dir = $log_root $+ %net $+ \
-  var %chan_dir = %net_dir $+ %chan $+ \
+  var %net_dir = $log_net_dir(%net)
+  var %chan_dir = $log_chan_dir(%net, %chan)
 
   var %best_file = $null
   var %best_time = 0
 
   ; Chercher dans le sous-dossier
   if ($isdir(%chan_dir)) {
-    var %tot_cf = $findfile($shortfn(%chan_dir), *.log, 0, 1)
+    var %tot_cf = $findfile(%chan_dir, *.log, 0, 1)
     var %i = 1
     while (%i <= %tot_cf) {
-      var %fp = $findfile($shortfn(%chan_dir), *.log, %i, 1)
+      var %fp = $findfile(%chan_dir, *.log, %i, 1)
       var %mt = $file(%fp).mtime
       if (%mt > %best_time) {
         %best_time = %mt
@@ -841,10 +864,10 @@ alias -l log_find_latest_file {
 
   ; Chercher aussi en direct dans le dossier réseau (%chan*.log)
   if ($isdir(%net_dir)) {
-    var %tot_nf = $findfile($shortfn(%net_dir), %chan $+ *.log, 0, 1)
+    var %tot_nf = $findfile(%net_dir, %chan $+ *.log, 0, 1)
     var %k = 1
     while (%k <= %tot_nf) {
-      var %fp2 = $findfile($shortfn(%net_dir), %chan $+ *.log, %k, 1)
+      var %fp2 = $findfile(%net_dir, %chan $+ *.log, %k, 1)
       var %mt2 = $file(%fp2).mtime
       if (%mt2 > %best_time) {
         %best_time = %mt2
