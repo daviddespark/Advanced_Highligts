@@ -424,10 +424,13 @@ on *:dialog:log_viewer_dialog:init:0: {
 
 on *:dialog:log_viewer_dialog:close:0: {
   if ($window(@log_vdraw)) window -c @log_vdraw
+  if ($window(@log_temp_net)) window -c @log_temp_net
+  if ($window(@log_temp_ch)) window -c @log_temp_ch
+  if ($window(@log_temp_f)) window -c @log_temp_f
+  if ($window(@log_temp_fl)) window -c @log_temp_fl
   if ($hget(log_net_h)) hfree log_net_h
   if ($hget(log_chan_h)) hfree log_chan_h
   if ($hget(log_files_h)) hfree log_files_h
-  unset %log_pop_chan %log_pop_chan_dir %log_latest_target %log_latest_chan_dir %log_latest_best_file %log_latest_best_time
   unset %log_v_net %log_v_chan %log_v_file
 }
 
@@ -524,12 +527,20 @@ alias -l log_viewer_populate_networks {
   var %root = $log_root
   if (!$isdir(%root)) mkdir $qt(%root)
 
-  if ($hget(log_net_h)) hfree log_net_h
-  hmake log_net_h 50
+  if ($window(@log_temp_net)) window -c @log_temp_net
+  window -hn @log_temp_net
+  noop $finddir(%root, *, 0, 1, @log_temp_net)
 
-  noop $finddir(%root, *, 0, 1, log_cb_add_net $1-)
-
-  if ($hget(log_net_h)) hfree log_net_h
+  var %tot = $line(@log_temp_net, 0)
+  var %i = 1
+  while (%i <= %tot) {
+    var %net_name = $nopath($line(@log_temp_net, %i))
+    if (%net_name != $null) {
+      did -a %d 11 %net_name
+    }
+    inc %i
+  }
+  window -c @log_temp_net
 
   if ($did(%d, 11).lines > 0) {
     ; Tenter de sélectionner le réseau actif ou le premier
@@ -546,14 +557,6 @@ alias -l log_viewer_populate_networks {
   }
   else {
     did -a %d 11 (Aucun dossier réseau)
-  }
-}
-
-alias -l log_cb_add_net {
-  var %net_name = $nopath($1-)
-  if (%net_name != $null) && (!$hget(log_net_h, %net_name)) {
-    hadd log_net_h %net_name 1
-    did -a log_viewer_dialog 11 %net_name
   }
 }
 
@@ -576,12 +579,44 @@ alias -l log_viewer_populate_channels {
   if ($hget(log_chan_h)) hfree log_chan_h
   hmake log_chan_h 200
 
+  if ($window(@log_temp_ch)) window -c @log_temp_ch
+  window -hn @log_temp_ch
+
   ; 1. Trouver les sous-dossiers de salons
-  noop $finddir(%net_dir, *, 0, 1, log_cb_add_chan_dir $1-)
+  noop $finddir(%net_dir, *, 0, 1, @log_temp_ch)
+  var %tot_dirs = $line(@log_temp_ch, 0)
+  var %i = 1
+  while (%i <= %tot_dirs) {
+    var %ch_dir = $nopath($line(@log_temp_ch, %i))
+    if (%ch_dir != $null) && (!$hget(log_chan_h, %ch_dir)) {
+      hadd log_chan_h %ch_dir 1
+      did -a %d 21 %ch_dir
+    }
+    inc %i
+  }
 
-  ; 2. Scanner les fichiers logs directs en une seule passe C++
-  noop $findfile(%net_dir, *.log, 0, 1, log_cb_add_chan_file $1-)
+  ; 2. Scanner les fichiers logs directs (#salon.date.log) pour extraire les salons
+  clear @log_temp_ch
+  noop $findfile(%net_dir, *.log, 0, 1, @log_temp_ch)
+  var %tot_files = $line(@log_temp_ch, 0)
+  var %j = 1
+  while (%j <= %tot_files) {
+    var %fn = $nopath($line(@log_temp_ch, %j))
+    var %ch_name = $null
+    if ($regex(%fn, /^([#&][^._]+)/)) {
+      %ch_name = $regml(1)
+    }
+    elseif ($regex(%fn, /^([^._]+)/)) {
+      %ch_name = $regml(1)
+    }
+    if (%ch_name != $null) && (!$hget(log_chan_h, %ch_name)) {
+      hadd log_chan_h %ch_name 1
+      did -a %d 21 %ch_name
+    }
+    inc %j
+  }
 
+  window -c @log_temp_ch
   if ($hget(log_chan_h)) hfree log_chan_h
 
   if ($did(%d, 21).lines > 0) {
@@ -593,29 +628,6 @@ alias -l log_viewer_populate_channels {
     set %log_v_chan $null
     set %log_v_file $null
     did -a %d 21 (Aucun salon trouvé)
-  }
-}
-
-alias -l log_cb_add_chan_dir {
-  var %ch_dir = $nopath($1-)
-  if (%ch_dir != $null) && (!$hget(log_chan_h, %ch_dir)) {
-    hadd log_chan_h %ch_dir 1
-    did -a log_viewer_dialog 21 %ch_dir
-  }
-}
-
-alias -l log_cb_add_chan_file {
-  var %f_name = $nopath($1-)
-  var %ch_name = $null
-  if ($regex(%f_name, /^([#&][^._]+)/)) {
-    %ch_name = $regml(1)
-  }
-  elseif ($regex(%f_name, /^([^._]+)/)) {
-    %ch_name = $regml(1)
-  }
-  if (%ch_name != $null) && (!$hget(log_chan_h, %ch_name)) {
-    hadd log_chan_h %ch_name 1
-    did -a log_viewer_dialog 21 %ch_name
   }
 }
 
@@ -643,23 +655,37 @@ alias -l log_viewer_populate_files {
   if ($hget(log_files_h)) hfree log_files_h
   hmake log_files_h 200
 
-  set -e %log_pop_chan %chan
-  set -e %log_pop_chan_dir %chan_dir
+  if ($window(@log_temp_f)) window -c @log_temp_f
+  window -hn @log_temp_f
 
   ; 1. Chercher dans le sous-dossier dédié (s'il existe)
   if ($isdir(%chan_dir)) {
-    noop $findfile(%chan_dir, *.log, 0, 1, log_cb_add_file $1-)
+    noop $findfile(%chan_dir, *.log, 0, 1, @log_temp_f)
   }
 
   ; 2. Chercher aussi dans le dossier réseau direct (%chan*.log)
   if ($isdir(%net_dir)) {
-    noop $findfile(%net_dir, %chan $+ *.log, 0, 1, log_cb_add_file $1-)
-    if ($did(%d, 31).lines == 0) && ($regex(%chan, /^[#&]/)) {
-      noop $findfile(%net_dir, * $+ $mid(%chan, 2) $+ *.log, 0, 1, log_cb_add_file $1-)
+    noop $findfile(%net_dir, %chan $+ *.log, 0, 1, @log_temp_f)
+    if ($line(@log_temp_f, 0) == 0) && ($regex(%chan, /^[#&]/)) {
+      noop $findfile(%net_dir, * $+ $mid(%chan, 2) $+ *.log, 0, 1, @log_temp_f)
     }
   }
 
-  unset %log_pop_chan %log_pop_chan_dir
+  var %tot_f = $line(@log_temp_f, 0)
+  var %k = 1
+  while (%k <= %tot_f) {
+    var %fp = $line(@log_temp_f, %k)
+    var %fn = $nopath(%fp)
+    if ($nofile(%fp) == %chan_dir) || ($regex(%fn, /^\Q $+ %chan $+ \E[._]/i)) {
+      if (!$hget(log_files_h, %fn)) {
+        hadd log_files_h %fn 1
+        did -a %d 31 %fn
+      }
+    }
+    inc %k
+  }
+
+  window -c @log_temp_f
   if ($hget(log_files_h)) hfree log_files_h
 
   if ($did(%d, 31).lines > 0) {
@@ -672,17 +698,6 @@ alias -l log_viewer_populate_files {
     set %log_v_file $null
     did -a %d 31 (Aucun fichier log)
     did -ra %d 50 Aucun log trouvé pour ce salon.
-  }
-}
-
-alias -l log_cb_add_file {
-  var %fp = $1-
-  var %fn = $nopath(%fp)
-  if ($nofile(%fp) == %log_pop_chan_dir) || ($regex(%fn, /^\Q $+ %log_pop_chan $+ \E[._]/i)) {
-    if (!$hget(log_files_h, %fn)) {
-      hadd log_files_h %fn 1
-      did -a log_viewer_dialog 31 %fn
-    }
   }
 }
 
@@ -748,40 +763,45 @@ alias -l log_viewer_display_selected {
 alias -l log_find_latest_file {
   var %net = $1
   var %chan = $2
-  set -e %log_latest_target %chan
-  set -e %log_latest_chan_dir $log_root $+ %net $+ \ $+ %chan $+ \
-  set -e %log_latest_best_file $null
-  set -e %log_latest_best_time 0
+  var %net_dir = $log_root $+ %net $+ \
+  var %chan_dir = %net_dir $+ %chan $+ \
+
+  var %best_file = $null
+  var %best_time = 0
+
+  if ($window(@log_temp_fl)) window -c @log_temp_fl
+  window -hn @log_temp_fl
 
   ; Chercher dans le sous-dossier
-  if ($isdir(%log_latest_chan_dir)) {
-    noop $findfile(%log_latest_chan_dir, *.log, 0, 1, log_cb_latest $1-)
+  if ($isdir(%chan_dir)) {
+    noop $findfile(%chan_dir, *.log, 0, 1, @log_temp_fl)
   }
 
   ; Chercher aussi en direct dans le dossier réseau
-  var %net_dir = $log_root $+ %net $+ \
   if ($isdir(%net_dir)) {
-    noop $findfile(%net_dir, %chan $+ *.log, 0, 1, log_cb_latest $1-)
-    if (%log_latest_best_file == $null) && ($regex(%chan, /^[#&]/)) {
-      noop $findfile(%net_dir, * $+ $mid(%chan, 2) $+ *.log, 0, 1, log_cb_latest $1-)
+    noop $findfile(%net_dir, %chan $+ *.log, 0, 1, @log_temp_fl)
+    if ($line(@log_temp_fl, 0) == 0) && ($regex(%chan, /^[#&]/)) {
+      noop $findfile(%net_dir, * $+ $mid(%chan, 2) $+ *.log, 0, 1, @log_temp_fl)
     }
   }
 
-  var %res = %log_latest_best_file
-  unset %log_latest_target %log_latest_chan_dir %log_latest_best_file %log_latest_best_time
-  return %res
-}
-
-alias -l log_cb_latest {
-  var %fp = $1-
-  var %fn = $nopath(%fp)
-  if ($nofile(%fp) == %log_latest_chan_dir) || ($regex(%fn, /^\Q $+ %log_latest_target $+ \E[._]/i)) {
-    var %mt = $file(%fp).mtime
-    if (%mt > %log_latest_best_time) {
-      set -e %log_latest_best_time %mt
-      set -e %log_latest_best_file %fp
+  var %tot = $line(@log_temp_fl, 0)
+  var %i = 1
+  while (%i <= %tot) {
+    var %fp = $line(@log_temp_fl, %i)
+    var %fn = $nopath(%fp)
+    if ($nofile(%fp) == %chan_dir) || ($regex(%fn, /^\Q $+ %chan $+ \E[._]/i)) {
+      var %mt = $file(%fp).mtime
+      if (%mt > %best_time) {
+        %best_time = %mt
+        %best_file = %fp
+      }
     }
+    inc %i
   }
+
+  window -c @log_temp_fl
+  return %best_file
 }
 
 ; Affiche un fichier log dans la fenêtre @Logs avec loadbuf ultra-rapide
