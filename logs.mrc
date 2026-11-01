@@ -926,11 +926,15 @@ alias log_display_file {
   elseif (%sz > 1024) %sz_str = $round($calc(%sz / 1024), 2) Ko
 
   var %tot_lines = $lines(%f)
+  var %folder = $nofile(%f)
+  if ($right(%folder, 1) == \) %folder = $left(%folder, -1)
+  var %chan_or_net = $nopath(%folder)
+  var %filename = $nopath(%f)
 
-  titlebar @Logs - [ $+ $nopath($nofile(%f)) $+ ] $nopath(%f) ( $+ %sz_str $+ , %tot_lines lignes)
+  titlebar @Logs - $chr(91) $+ %chan_or_net $+ $chr(93) %filename ( $+ %sz_str $+ , %tot_lines lignes)
   clear @Logs
-  aline @Logs $chr(3) $+ 03*** Affichage intégral du log : $nopath(%f) ***
-  aline @Logs $chr(3) $+ 14Réseau / Dossier : $nofile(%f)
+  aline @Logs $chr(3) $+ 03*** Affichage intégral du log : %filename ***
+  aline @Logs $chr(3) $+ 14Dossier : $nofile(%f)
   aline @Logs $chr(3) $+ 14Taille : %sz_str $chr(124) Lignes totales du fichier : %tot_lines
   aline @Logs $chr(3) $+ 14════════════════════════════════════════════════════════════════════════════════
   
